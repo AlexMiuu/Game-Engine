@@ -1,0 +1,12 @@
+﻿  Camera.cpp
+  main.cpp
+C:\Users\alexa\OneDrive\Desktop\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(966,45): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+  Mesh.cpp
+  Model3D.cpp
+  RayCaster.cpp
+  Shader.cpp
+  SkyBox.cpp
+  stb_image.cpp
+  tiny_obj_loader.cpp
+  Generating Code...
+  LAB8_PG.vcxproj -> C:\Users\alexa\OneDrive\Desktop\PG_LAB1\LAB8_PG\x64\Debug\LAB8_PG.exe
