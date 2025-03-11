@@ -1,4 +1,4 @@
-//
+ï»¿//
 //  main.cpp
 //  OpenGL Advances Lighting
 //
@@ -28,6 +28,10 @@
 #include <iostream>
 #include <vector>
 #include <limits>
+#include <unordered_set>
+
+#include "RayCaster.hpp"
+#include "CameraIso.hpp"
 
 int glWindowWidth = 1920;
 int glWindowHeight = 1080;
@@ -44,12 +48,9 @@ glm::mat3 normalMatrix;
 GLuint normalMatrixLoc;
 
 // This variable will store the WORLD-Space position of our point light.
-// Previously it was named 'lightDir', but let's keep the name 'lightDir'
-// to minimize changes. Think of it now as a point light's world position.
 glm::vec3 lightDir = glm::vec3(0.0f, 1.0f, 1.0f);
 
-// We no longer use lightDirLoc as a direction uniform; 
-// Instead we have a new uniform for the point light in EYE space:
+
 GLuint lightPosEyeLoc;
 
 // Point-light color
@@ -77,12 +78,18 @@ gps::Model3D dragon;
 gps::Model3D rightWingModel;
 gps::Model3D leftWingModel;
 gps::Model3D dragon2;
+
+
 // Camera
+/*
 gps::Camera myCamera(
     glm::vec3(0.0f, 0.0f, 2.5f),
     glm::vec3(0.0f, 0.0f, -10.0f),
-    glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::vec3(0.0f, 1.0f, 0.0f));*/
 float cameraSpeed = 0.3f;
+
+gps::Camera myCamera(glm::vec3(0.0f, 5.0f, 5.0f)); // Only pass position
+//CameraISO myCamera(-150.0f, 150.0f, -150.0f, 150.0f, 0.1f, 1000.0f);
 
 bool pressedKeys[1024];
 float angleY = 0.0f;
@@ -112,7 +119,17 @@ bool dayCycle = true;
 int cursorCenterY = glWindowHeight /2;
 int cursorCenterX = glWindowWidth / 2;
 
-#include "RayCaster.hpp"
+
+GLint isSelectedLoc;
+GLint highlightColorLoc;
+
+
+std::unordered_set<int> selectedTroopIDs; // Stores IDs of selected troops
+int nextTroopID = 100; // Starting ID for new troops
+glm::vec3 troopSpawnPos = glm::vec3(100.0f, -60.0f, -90.0f); // Default spawn position
+
+static bool spawnEnabled = false;
+
 
 
 struct SceneObject {
@@ -222,6 +239,16 @@ void keyboardCallback(GLFWwindow* window, int key, int scancode, int action, int
         glUniform3fv(dirLightColorLoc, 1, glm::value_ptr(dirLightColorVal));
     }
 
+    if (key == GLFW_KEY_C && action == GLFW_PRESS)
+    {
+        spawnEnabled = true;
+    }
+    if (key == GLFW_KEY_X && action == GLFW_PRESS)
+    {
+        spawnEnabled = false;
+    }
+
+
   
 
     if (key >= 0 && key < 1024)
@@ -290,7 +317,7 @@ void mouseCallback(GLFWwindow* window, double xpos, double ypos) {
     if (pitch < -89.0f) pitch = -89.0f;
 
     // Rotate the camera, then recalc the view matrix
-    myCamera.rotate(pitch, yaw);
+   // myCamera.rotate(pitch, yaw);
     view = myCamera.getViewMatrix();
 
     // Upload the updated view and normal matrix
@@ -313,21 +340,18 @@ void processMovement() {
     bool cameraMoved = false;
 
     if (pressedKeys[GLFW_KEY_W]) {
-        myCamera.move(gps::MOVE_FORWARD, cameraSpeed);
-        cameraMoved = true;
+        myCamera.move(gps::MOVE_UP, cameraSpeed);
     }
     if (pressedKeys[GLFW_KEY_S]) {
-        myCamera.move(gps::MOVE_BACKWARD, cameraSpeed);
-        cameraMoved = true;
+        myCamera.move(gps::MOVE_DOWN, cameraSpeed);
     }
     if (pressedKeys[GLFW_KEY_A]) {
         myCamera.move(gps::MOVE_LEFT, cameraSpeed);
-        cameraMoved = true;
     }
     if (pressedKeys[GLFW_KEY_D]) {
         myCamera.move(gps::MOVE_RIGHT, cameraSpeed);
-        cameraMoved = true;
     }
+
 
     if (pressedKeys[GLFW_KEY_UP]) {
         y += 1.0f;
@@ -578,9 +602,8 @@ void initUniforms() {
     glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
 
     // Projection
-    projection = glm::perspective(glm::radians(45.0f),
-        (float)retina_width / (float)retina_height,
-        0.1f, 10000.0f);
+    projection = myCamera.getProjectionMatrix(-10.0f, 10.0f, -10.0f, 10.0f, 0.1f, 100.0f);
+
     projectionLoc = glGetUniformLocation(myCustomShader.shaderProgram, "projection");
     glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
@@ -616,6 +639,10 @@ void initUniforms() {
 
     GLint viewPosEyeLoc = glGetUniformLocation(myCustomShader.shaderProgram, "viewPosEye");
     glUniform3fv(viewPosEyeLoc, 1, glm::value_ptr(cameraPosEye));
+
+
+    isSelectedLoc = glGetUniformLocation(myCustomShader.shaderProgram, "isSelected");
+    highlightColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "highlightColor");
 }
 
 void initShadowMapping() {
@@ -655,17 +682,17 @@ void initShadowMapping() {
 
 glm::mat4 computeLightSpaceTrMatrix() {
     // Make the orthographic bounds bigger so we capture the entire scene.
-    // For instance, if your terrain is ~300x300 or more, try ±150 or ±200.
+    // For instance, if your terrain is ~300x300 or more, try Â±150 or Â±200.
     glm::mat4 lightProjection = glm::ortho(
         -150.0f,  // left
         150.0f,  // right
         -150.0f,  // bottom
         150.0f,  // top
         0.1f,   // near plane
-        600.0f    // far plane (big enough to enclose your terrain’s height)
+        600.0f    // far plane (big enough to enclose your terrainâ€™s height)
     );
 
-    // Pick a higher, more “top-down” position for the directional light
+    // Pick a higher, more â€œtop-downâ€ position for the directional light
     // so it casts shadows across the whole terrain.
     glm::mat4 lightView = glm::lookAt(
         glm::vec3(z,y,z), // new light position above & offset
@@ -716,6 +743,11 @@ void renderScene()
 
     // Draw all objects in the scene
     for (auto& obj : g_sceneObjects) {
+
+        bool isTroopSelected = selectedTroopIDs.count(obj.id) > 0;
+        glUniform1i(isSelectedLoc, isTroopSelected);
+        glUniform3fv(highlightColorLoc, 1, glm::value_ptr(glm::vec3(1.0, 1.0, 0.0))); // Yellow highlight
+
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(obj.modelMatrix));
         glm::mat3 nm = glm::mat3(glm::inverseTranspose(view * obj.modelMatrix));
         glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(nm));
@@ -776,9 +808,35 @@ SceneObject* getSceneObjectById(int id) {
 
 static bool orcSelected = false;
 
+void spawnTroop(glm::vec3 position) {
+    SceneObject newTroop;
+    newTroop.id = nextTroopID++;
+    newTroop.modelPtr = &orcModel;
+
+    // Offset spawn position slightly for multiple troops
+    //troopSpawnPos.x += 5.0f;
+   // if (troopSpawnPos.x > 120.0f) troopSpawnPos.x = 100.0f; // Reset X if needed
+
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), position);
+    glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(3.5f));
+    newTroop.modelMatrix = T * S;
+    newTroop.scale = glm::vec3(3.5f);
+
+    computeLocalBoundingSphere(*newTroop.modelPtr, newTroop.localCenter, newTroop.localRadius);
+    
+    g_sceneObjects.push_back(newTroop);
+    updateWorldBounds(newTroop);
+
+
+}
+
+
+
+
+
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
 {
-    if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS)
+    if (action == GLFW_PRESS)
     {
         double mouseX, mouseY;
         glfwGetCursorPos(window, &mouseX, &mouseY);
@@ -808,14 +866,9 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
             }
         }
 
-        // If first click is on the orc
-        if (!orcSelected && pickedID == 2) {
-            orcSelected = true;
-            std::cout << "Orc selected. Next click on terrain to place it.\n";
-        }
-        // If orc is already selected, second click means "place it"
-        else if (orcSelected) {
-            SceneObject* terrainObj = getSceneObjectById(1); // terrain
+        if (button == GLFW_MOUSE_BUTTON_LEFT && spawnEnabled == true) {
+
+            SceneObject* terrainObj = getSceneObjectById(1); // Terrain object
             if (terrainObj) {
                 float outT;
                 glm::vec3 outPoint;
@@ -826,37 +879,96 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods)
                     outT,
                     outPoint
                 );
-                if (hit) {
-                    // Place orc at that intersection
-                    SceneObject* orcObj = getSceneObjectById(2);
-                    if (orcObj) {
-                        glm::vec3 currentPos = glm::vec3(orcObj->modelMatrix[3]);
-                        orcObj->isMoving      = true;
-                        orcObj->moveStartTime = static_cast<float>(glfwGetTime());
-                        orcObj->moveDuration  = 2.0f;
-                        orcObj->moveStartPos  = currentPos;
-                        orcObj->moveEndPos    = outPoint;
 
-                        updateWorldBounds(*orcObj);
-                        std::cout << "Orc placed at: "
-                                  << outPoint.x << ", "
-                                  << outPoint.y << ", "
-                                  << outPoint.z << "\n";
-                    }
-                }
-                else {
-                    std::cout << "No mesh intersection with terrain!\n";
+                if (hit) {
+
+                    //glm::to_string(outPoint);
+                    spawnTroop(outPoint);
+
                 }
             }
-            orcSelected = false;
+
+        }
+
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            if (pickedID != -1) {
+                // If clicked on a troop, toggle selection
+                if (pickedID == 2 || pickedID>=100) { // Assume troops have IDs >= 2
+                    if (selectedTroopIDs.count(pickedID)) {
+                        selectedTroopIDs.erase(pickedID); // Deselect if already selected
+                        std::cout << "Unit " << pickedID << " deselected.\n";
+                    }
+                    else {
+                        selectedTroopIDs.insert(pickedID); // Select unit
+                        std::cout << "Unit " << pickedID << " selected.\n";
+                    }
+                }
+            }
+            if (!selectedTroopIDs.empty()) { // If clicking terrain, move all selected troops
+                SceneObject* terrainObj = getSceneObjectById(1); // Terrain object
+                if (terrainObj) {
+                    float outT;
+                    glm::vec3 outPoint;
+                    bool hit = gps::RayIntersectsModelWithMatrix(
+                        ray,
+                        *(terrainObj->modelPtr),
+                        terrainObj->modelMatrix,
+                        outT,
+                        outPoint
+                    );
+
+                    if (hit) {
+                        // Move all selected units
+                        for (int troopID : selectedTroopIDs) {
+                            SceneObject* troopObj = getSceneObjectById(troopID);
+                            if (troopObj) {
+                                glm::vec3 currentPos = glm::vec3(troopObj->modelMatrix[3]);
+                                troopObj->isMoving = true;
+                                troopObj->moveStartTime = static_cast<float>(glfwGetTime());
+                                troopObj->moveDuration = 2.0f;
+                                troopObj->moveStartPos = currentPos;
+                                troopObj->moveEndPos = outPoint; // Move to same spot
+
+                                updateWorldBounds(*troopObj);
+                                std::cout << "Unit " << troopID << " moved to: "
+                                    << outPoint.x << ", "
+                                    << outPoint.y << ", "
+                                    << outPoint.z << "\n";
+                            }
+                        }
+                    }
+                    else {
+                        std::cout << "No terrain intersection detected!\n";
+                    }
+                }
+            }
+        }
+        // Right-click: Deselect only the clicked unit
+        else if (button == GLFW_MOUSE_BUTTON_RIGHT) {
+            if (pickedID != -1 && selectedTroopIDs.count(pickedID)) {
+                selectedTroopIDs.erase(pickedID);
+                std::cout << "Unit " << pickedID << " deselected.\n";
+            }
         }
     }
+
+        // If first click is on the orc
+
+        /*
+        if (!orcSelected && pickedID == 2) {
+            orcSelected = true;
+            std::cout << "Orc selected. Next click on terrain to place it.\n";
+        }
+
+        */
+        // If orc is already selected, second click means "place it"
+        
 }
 
 
 void renderSkybox() {
     // 2) Draw the skybox last, using a view matrix WITHOUT the camera translation.
-//    This prevents the skybox from “sliding” or “spinning around” weirdly when you move.
+//    This prevents the skybox from â€œslidingâ€ or â€œspinning aroundâ€ weirdly when you move.
     glDepthFunc(GL_LEQUAL);   // skybox passes if depth >= existing
     glDepthMask(GL_FALSE);    // no depth writes from the skybox
 
@@ -871,7 +983,7 @@ void renderSkybox() {
     glUniformMatrix4fv(skyboxViewLoc, 1, GL_FALSE, glm::value_ptr(skyboxView));
     glUniformMatrix4fv(skyboxProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-    // Now actually draw the cube for your skybox
+    // cube for  skybox
     glDisable(GL_CULL_FACE);
     daySkyBox.Draw(skyboxShader, skyboxView, projection);
     glEnable(GL_CULL_FACE);
@@ -883,6 +995,8 @@ void renderSkybox() {
     glDepthMask(GL_TRUE);
     glDepthFunc(GL_LESS);
 }
+
+
 
 
 static void setupMouseButtonCallback()
