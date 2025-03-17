@@ -24,6 +24,11 @@ uniform vec3 dirLightColor;
 uniform sampler2D shadowMap;
 in vec4 FragPosLightSpace;
 
+
+uniform bool isSelected;
+uniform vec3 highlightColor;
+uniform int objectID;
+
 void computeLightComponents(out vec3 ambient, out vec3 diffuse, out vec3 specular) {
     vec3 normalEye = normalize(fNormal);
     vec3 lightDirN = normalize(lightPosEye - fPosEye.xyz);
@@ -108,4 +113,7 @@ void main() {
     vec3 lighting =  (ambDir + (1.0 - shadowAmount ) * (diffDir + specDir))+ (ambientP + (1.0 - shadowAmount) * (diffuseP + specularP));
 
     fColor = vec4(clamp(lighting, 0.0, 1.0), 1.0);
+if (isSelected && (objectID == 2 || objectID >= 100)) {
+    fColor = mix(fColor, vec4(highlightColor, 1.0), 0.3); // 30% highlight
+}
 }
