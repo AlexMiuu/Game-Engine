@@ -1,4 +1,5 @@
-#pragma once
+#ifndef RayCaster_hpp
+#define RayCaster_hpp
 
 #include <glm/glm.hpp>
 #include "Model3D.hpp"
@@ -49,3 +50,4 @@ namespace gps {
     );
 
 } // end namespace gps
+#endif

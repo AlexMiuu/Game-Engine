@@ -13,16 +13,16 @@ namespace gps {
     }
 
     // Return the isometric view matrix
-    glm::mat4 Camera::getViewMatrix() {
+    glm::mat4 Camera::getViewMatrix()  const {
         // Create the view matrix with RTS-style isometric angles
         glm::mat4 view = glm::lookAt(cameraPosition, cameraTarget, cameraUpDirection);
 
         // Apply RTS-style rotation (45 degrees around Y, 60 degrees around X)
-        float rtsAngleX =  60.0f;  // More top-down view typical for RTS games
-        float rtsAngleY = 45.0f;  // Standard 45-degree rotation
+        //float rtsAngleX =  60.0f;  // More top-down view typical for RTS games
+        //float rtsAngleY = 45.0f;  // Standard 45-degree rotation
 
-        view = glm::rotate(view, glm::radians(rtsAngleX), glm::vec3(1.0f, 0.0f, 0.0f));
-        view = glm::rotate(view, glm::radians(rtsAngleY), glm::vec3(0.0f, 1.0f, 0.0f));
+        //view = glm::rotate(view, glm::radians(rtsAngleX), glm::vec3(1.0f, 0.0f, 0.0f));
+        //view = glm::rotate(view, glm::radians(rtsAngleY), glm::vec3(0.0f, 1.0f, 0.0f));
 
         return view;
     }
@@ -31,6 +31,14 @@ namespace gps {
     glm::mat4 Camera::getProjectionMatrix(float left, float right, float bottom, float top, float near, float far) {
         return glm::ortho(left, right, bottom, top, near, far);
     }
+
+    glm::vec3 getCameraPosition(){ 
+
+        glm::vec3 cameraPos = getCameraPosition();
+
+        return cameraPos;
+    }
+
 
     // Move the camera in 2D space
     void Camera::move(MOVE_DIRECTION direction, float speed) {

@@ -1,10 +1,18 @@
 ﻿  main.cpp
-C:\Users\alexa\OneDrive\Desktop\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(945,20): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\alexa\OneDrive\Desktop\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(946,20): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
-C:\Users\alexa\OneDrive\Desktop\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(1173,41): warning C4244: 'initializing': conversion from 'double' to 'float', possible loss of data
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(243,25): warning C4267: 'initializing': conversion from 'size_t' to 'int', possible loss of data
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(264,54): warning C4244: '=': conversion from 'double' to 'float', possible loss of data
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(270,22): warning C4566: character represented by universal-character-name '\U0001F4CD' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(375,18): warning C4566: character represented by universal-character-name '\U0001F4E6' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(384,18): warning C4566: character represented by universal-character-name '\u2705' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(486,18): warning C4566: character represented by universal-character-name '\u2705' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(496,18): warning C4566: character represented by universal-character-name '\u2705' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(656,18): warning C4566: character represented by universal-character-name '\U0001F3AE' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(679,18): warning C4566: character represented by universal-character-name '\u2705' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(680,18): warning C4566: character represented by universal-character-name '\U0001F3AE' cannot be represented in the current code page (1250)
+C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\LAB8_PG\main.cpp(799,18): warning C4566: character represented by universal-character-name '\U0001F44B' cannot be represented in the current code page (1250)
   Generating code
-  6 of 2010 functions ( 0.3%) were compiled, the rest were copied from previous compilation.
-    1 functions were new in current compilation
-    23 functions had inline decision re-evaluated but remain unchanged
+  0 of 2528 functions ( 0.0%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    0 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
-  LAB8_PG.vcxproj -> C:\Users\alexa\OneDrive\Desktop\PG_LAB1\LAB8_PG\x64\Release\LAB8_PG.exe
+  LAB8_PG.vcxproj -> C:\Users\alexa\OneDrive\Desktop\licenta\PG_LAB1\LAB8_PG\x64\Release\LAB8_PG.exe
