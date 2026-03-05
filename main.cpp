@@ -163,7 +163,7 @@ void initModels();
 void initShaders();
 void initUniforms();
 void initSkyBox();
-//void initTileManager();
+void initTileManager();
 void initSceneManager();
 void initSelectionSystem();
 
@@ -462,20 +462,24 @@ void initTileManager() {
 }
 */
 void initSceneManager() {
-    // 1. Creează scena
+    // 1. Creeaza scena
     g_scene = new gps::Scene("MainScene");
 
-    // 2. Creează scene manager
+    // 2. Creeaza scene manager
     g_sceneManager = new gps::SceneManager();
     g_sceneManager->Initialize(g_scene, &g_tileManager);
 
-    // 3. Înregistrează modelele
+    // 3. Inregistreaza modelele
     g_sceneManager->RegisterModel("terrain", &sceneModel);
     g_sceneManager->RegisterModel("objects", &obiecte);
     g_sceneManager->RegisterModel("orc", &orcModel);
     g_sceneManager->RegisterModel("dragon", &dragon);
     g_sceneManager->RegisterModel("leftWing", &leftWingModel);
     g_sceneManager->RegisterModel("rightWing", &rightWingModel);
+
+    g_tileManager.Initialize(&sceneModel, g_scene);
+    // Optional: genereaza si incarca un grid 3x3
+    g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
 
     // 4. Setup scena
     g_sceneManager->SetupScene();
@@ -495,6 +499,8 @@ void initSelectionSystem() {
 
     std::cout << "✅ SelectionSystem initialized" << std::endl;
 }
+
+
 
 // ===========================
 // GAME LOOP

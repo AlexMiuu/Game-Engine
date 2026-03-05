@@ -1,3 +1,14 @@
+Ôªø//
+// TileManager.hpp
+// Manager de tile-uri REFACTORIZAT pentru noul SceneObject system
+//
+// SCHIMBARI vs. versiunea veche:
+//   - Eliminat LegacySceneObject complet
+//   - Foloseste Scene::CreateObject() / Scene::DestroyObject()
+//   - Tile-urile sunt acum SceneObject-uri reale in scena
+//   - Compatibil cu SelectionSystem, rendering pipeline, etc.
+//
+
 #ifndef TILE_MANAGER_HPP
 #define TILE_MANAGER_HPP
 
@@ -6,18 +17,26 @@
 #include <map>
 #include <vector>
 #include <string>
-#include "Model3D.hpp"
+
+// Forward declarations (evitam dependinte circulare)
+namespace gps {
+    class Model3D;
+    class Scene;
+    class SceneObject;
+}
 
 namespace gps {
 
-    // Structura pentru un tile individual
+    // ===========================
+    // TILE STRUCT
+    // ===========================
     struct Tile {
-        int gridX;           // Coordonata X in grid
-        int gridZ;           // Coordonata Z in grid
-        glm::vec3 worldPos;  // Pozitia in world space
-        int sceneObjectId;   // ID-ul in g_sceneObjects
-        bool isLoaded;       // Daca e incarcat in scena
-        std::string terrainType; // Tipul de teren (ex: "grass", "desert", "snow")
+        int gridX;              // Coordonata X in grid
+        int gridZ;              // Coordonata Z in grid
+        glm::vec3 worldPos;     // Pozitia in world space
+        int sceneObjectId;      // ID-ul SceneObject-ului din Scene (NOU!)
+        bool isLoaded;          // Daca e incarcat in scena
+        std::string terrainType;
 
         Tile() : gridX(0), gridZ(0), worldPos(0.0f), sceneObjectId(-1),
             isLoaded(false), terrainType("default") {}
@@ -27,88 +46,124 @@ namespace gps {
             isLoaded(false), terrainType(type) {}
     };
 
-    // CORECTARE: Redenumit din SceneObject Ón LegacySceneObject
-    // pentru a evita conflictul cu clasa SceneObject din SceneObject.hpp
-    // Aceast„ structur„ e folosit„ doar pentru compatibilitate cu codul vechi
-    struct LegacySceneObject {
-        int id;
-        gps::Model3D* modelPtr;
-        glm::mat4 modelMatrix;
-        glm::vec3 localCenter;
-        float localRadius;
-        glm::vec3 worldCenter;
-        float worldRadius;
-        bool isMoving = false;
-        float moveStartTime = 0.0f;
-        float moveDuration = 0.0f;
-        glm::vec3 moveStartPos;
-        glm::vec3 moveEndPos;
-        glm::vec3 scale = glm::vec3(1.0f);
-    };
-
-    // Managerul de tile-uri
+    // ===========================
+    // TILE MANAGER (REFACTORIZAT)
+    // ===========================
     class TileManager {
     public:
-        // Constructor
         TileManager(float tileSize = 300.0f);
 
-        // Initializare cu model de teren
-        void Initialize(Model3D* terrainModel);
+        // ===========================
+        // INITIALIZATION
+        // ===========================
 
-        // Creaza un tile la coordonatele grid specificate
+        /**
+         * @brief Initializeaza TileManager cu model de teren SI scena
+         * @param terrainModel Modelul 3D folosit pentru tile-uri
+         * @param scene Pointer la scena (pentru a crea SceneObject-uri)
+         *
+         * NOTA: scene NU mai e optional - TileManager are nevoie de el
+         */
+        void Initialize(Model3D* terrainModel, Scene* scene);
+
+        // ===========================
+        // TILE CREATION / LOADING
+        // ===========================
+
+        /**
+         * @brief Creeaza un tile la coordonatele grid specificate
+         * NU il incarca in scena - doar il inregistreaza intern
+         */
         Tile* CreateTile(int gridX, int gridZ, const std::string& terrainType = "default");
 
-        // CORECTARE: Actualizat s„ foloseasc„ LegacySceneObject
-        // Incarca un tile in scena (adauga in g_sceneObjects)
-        bool LoadTile(int gridX, int gridZ, std::vector<LegacySceneObject>& sceneObjects, int& nextID);
+        /**
+         * @brief Incarca un tile in scena (creeaza SceneObject)
+         * @return true daca tile-ul a fost incarcat cu succes
+         *
+         * Creeaza un SceneObject real prin Scene::CreateObject()
+         * cu model, transform si bounding sphere setate corect.
+         */
+        bool LoadTile(int gridX, int gridZ);
 
-        // Descarca un tile din scena
-        bool UnloadTile(int gridX, int gridZ, std::vector<LegacySceneObject>& sceneObjects);
+        /**
+         * @brief Descarca un tile din scena (sterge SceneObject-ul)
+         * @return true daca tile-ul a fost descarcat cu succes
+         */
+        bool UnloadTile(int gridX, int gridZ);
 
-        // Obtine tile la coordonate grid
-        Tile* GetTile(int gridX, int gridZ);
+        // ===========================
+        // BATCH OPERATIONS
+        // ===========================
 
-        // Verifica daca exista tile la coordonate
-        bool HasTile(int gridX, int gridZ) const;
+        /**
+         * @brief Incarca tile-urile intr-o raza specificata
+         */
+        void LoadTilesInRadius(const glm::vec3& centerPos, float radius);
 
-        // Incarca tile-urile intr-o raza specificata de la o pozitie
-        void LoadTilesInRadius(const glm::vec3& centerPos, float radius,
-            std::vector<LegacySceneObject>& sceneObjects, int& nextID);
+        /**
+         * @brief Descarca tile-urile in afara razei
+         */
+        void UnloadTilesOutsideRadius(const glm::vec3& centerPos, float radius);
 
-        // Descarca tile-urile care sunt in afara razei
-        void UnloadTilesOutsideRadius(const glm::vec3& centerPos, float radius,
-            std::vector<LegacySceneObject>& sceneObjects);
-
-        // Genereaza un grid de tile-uri (pentru initializare)
+        /**
+         * @brief Genereaza un grid de tile-uri (doar creare, fara load)
+         */
         void GenerateGrid(int minX, int maxX, int minZ, int maxZ,
             const std::string& terrainType = "default");
 
-        // Converti coordonate world la grid
-        void WorldToGrid(const glm::vec3& worldPos, int& outGridX, int& outGridZ) const;
+        /**
+         * @brief Genereaza SI incarca un grid complet
+         * Shortcut pentru GenerateGrid() + LoadAll()
+         */
+        void GenerateAndLoadGrid(int minX, int maxX, int minZ, int maxZ,
+            const std::string& terrainType = "default");
 
-        // Converti coordonate grid la world
+        // ===========================
+        // QUERIES
+        // ===========================
+
+        Tile* GetTile(int gridX, int gridZ);
+        bool HasTile(int gridX, int gridZ) const;
+
+        /**
+         * @brief Obtine SceneObject-ul asociat unui tile
+         * @return Pointer la SceneObject sau nullptr
+         */
+        SceneObject* GetTileSceneObject(int gridX, int gridZ);
+
+        // Conversii coordonate
+        void WorldToGrid(const glm::vec3& worldPos, int& outGridX, int& outGridZ) const;
         glm::vec3 GridToWorld(int gridX, int gridZ) const;
 
-        // Obtine dimensiunea unui tile
+        // Getters
         float GetTileSize() const { return m_tileSize; }
-
-        // Seteaza dimensiunea unui tile
         void SetTileSize(float size) { m_tileSize = size; }
 
-        // Obtine toate tile-urile incarcate
         std::vector<Tile*> GetLoadedTiles();
-
-        // Obtine toate tile-urile (incarcate sau nu)
         std::vector<Tile*> GetAllTiles();
+        int GetLoadedCount() const;
+        int GetTotalCount() const { return static_cast<int>(m_tiles.size()); }
 
-        // Sterge toate tile-urile
+        // ===========================
+        // CLEANUP
+        // ===========================
+
+        /**
+         * @brief Sterge toate tile-urile (si SceneObject-urile din scena)
+         */
         void Clear();
 
-        // Debug: afiseaza informatii despre tile-uri
+        /**
+         * @brief Descarca toate tile-urile fara a le sterge
+         */
+        void UnloadAll();
+
+        // ===========================
+        // DEBUG
+        // ===========================
         void PrintDebugInfo() const;
 
     private:
-        // Hash-ul pentru cheia de grid
         struct GridKey {
             int x, z;
 
@@ -122,18 +177,21 @@ namespace gps {
             }
         };
 
-        // Map-ul cu toate tile-urile
         std::map<GridKey, Tile> m_tiles;
-
-        // Modelul de teren folosit pentru tile-uri
         Model3D* m_terrainModel;
-
-        // Dimensiunea unui tile
+        Scene* m_scene;          // ‚Üê NOU: referinta la scena
         float m_tileSize;
 
-        // CORECTARE: Actualizat s„ returneze LegacySceneObject
-        // Helper: creeaza un SceneObject pentru un tile
-        LegacySceneObject CreateSceneObjectForTile(const Tile& tile, int objectId);
+        /**
+         * @brief Creeaza un SceneObject pentru un tile si il adauga in scena
+         * @return ID-ul SceneObject-ului creat, sau -1 la eroare
+         */
+        int CreateSceneObjectForTile(const Tile& tile);
+
+        /**
+         * @brief Calculeaza bounding sphere local pentru model
+         */
+        void ComputeLocalBoundingSphere(Model3D* model, glm::vec3& outCenter, float& outRadius);
     };
 
 } // namespace gps

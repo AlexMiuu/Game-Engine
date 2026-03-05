@@ -320,7 +320,9 @@ namespace gps {
         void RestoreRenderState();
 
 
-
+        Ray ComputeOrthoRay(const glm::vec2& screenPos,
+            const Camera& camera,
+            const glm::mat4& projection) const;
     };
 
 } // namespace gps

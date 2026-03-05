@@ -1,4 +1,4 @@
-//
+ï»¿//
 // SelectionSystem.cpp
 // Implementarea sistemului de selec?ie
 //
@@ -62,14 +62,14 @@ namespace gps {
     }
 
     void SelectionSystem::InitializeRenderResources() {
-        // Creeazã VAO ?i VBO pentru box
+        // CreeazÄƒ VAO ?i VBO pentru box
         glGenVertexArrays(1, &m_boxVAO);
         glGenBuffers(1, &m_boxVBO);
 
         glBindVertexArray(m_boxVAO);
         glBindBuffer(GL_ARRAY_BUFFER, m_boxVBO);
 
-        // Alocã spa?iu pentru 4 vertices (quad)
+        // AlocÄƒ spa?iu pentru 4 vertices (quad)
         glBufferData(GL_ARRAY_BUFFER, 4 * 2 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
 
         // Position attribute (2D - screen space)
@@ -111,23 +111,23 @@ namespace gps {
         const glm::mat4& projection, bool additive) {
         if (!m_isBoxSelecting) return;
 
-        // Verificã dimensiunea minimã a box-ului
+        // VerificÄƒ dimensiunea minimÄƒ a box-ului
         float boxWidth = std::abs(m_boxEnd.x - m_boxStart.x);
         float boxHeight = std::abs(m_boxEnd.y - m_boxStart.y);
 
         if (boxWidth < m_minBoxSize && boxHeight < m_minBoxSize) {
-            // Box prea mic - trateazã ca single click
+            // Box prea mic - trateazÄƒ ca single click
             m_isBoxSelecting = false;
             SelectAtPoint(scene, camera, projection, m_boxStart, additive);
             return;
         }
 
-        // Gole?te selec?ia dacã nu e additive
+        // Gole?te selec?ia dacÄƒ nu e additive
         if (!additive) {
             ClearSelection();
         }
 
-        // Selecteazã obiecte în box
+        // SelecteazÄƒ obiecte Ã®n box
         int selectedCount = 0;
         for (const auto& objPtr : scene.GetObjects()) {
             SceneObject* obj = objPtr.get();
@@ -150,19 +150,102 @@ namespace gps {
     // SINGLE SELECTION
     // ===========================
 
+    Ray SelectionSystem::ComputeOrthoRay(const glm::vec2& screenPos,
+        const Camera& camera,
+        const glm::mat4& projection) const
+    {
+        float xNdc = (2.0f * screenPos.x) / static_cast<float>(m_screenWidth) - 1.0f;
+        float yNdc = 1.0f - (2.0f * screenPos.y) / static_cast<float>(m_screenHeight);
+
+        glm::vec4 nearPointNDC(xNdc, yNdc, -1.0f, 1.0f);
+
+        glm::mat4 view = camera.getViewMatrix();
+        glm::mat4 inverseVP = glm::inverse(projection * view);
+
+        glm::vec4 nearPointWorld = inverseVP * nearPointNDC;
+        if (nearPointWorld.w != 0.0f) {
+            nearPointWorld /= nearPointWorld.w;
+        }
+
+        Ray ray;
+        ray.origin = glm::vec3(nearPointWorld);
+        ray.direction = glm::normalize(camera.getCameraFrontDirection());
+
+        return ray;
+    }
+
+
+
     void SelectionSystem::SelectAtPoint(Scene& scene, const Camera& camera,
         const glm::mat4& projection,
         const glm::vec2& screenPos, bool additive) {
-        // TODO: Implementeazã raycasting pentru single selection
-        // Pentru simplitate, pentru moment doar gole?te selec?ia dacã nu e additive
+        // TODO: ImplementeazÄƒ raycasting pentru single selection
+        // Pentru simplitate, pentru moment doar gole?te selec?ia dacÄƒ nu e additive
 
         if (!additive) {
             ClearSelection();
         }
 
-        // Ar trebui sã faci raycast ?i sã gãse?ti obiectul cel mai apropiat
-        // Pentru moment, doar log
-        std::cout << "?? Single selection at (" << screenPos.x << ", " << screenPos.y << ")" << std::endl;
+        Ray ray = ComputeOrthoRay(screenPos, camera, projection);
+
+        // 2. Cauta cel mai apropiat obiect intersectat
+        float closestDistance = FLT_MAX;
+        int closestID = -1;
+        std::string closestName = "";
+
+        for (const auto& objPtr : scene.GetObjects()) {
+            SceneObject* obj = objPtr.get();
+
+            // Filtreaza obiectele neselectabile
+            if (!IsSelectable(*obj)) continue;
+            if (!obj->GetModel()) continue;
+
+            // â”€â”€â”€ PASUL 2: Test rapid cu bounding sphere â”€â”€â”€
+            // Sphere test e O(1) - reject rapid pentru obiecte departe de cursor
+            float sphereDistance = 0.0f;
+            bool hitSphere = RayIntersectsSphere(
+                ray,
+                obj->GetWorldCenter(),
+                obj->GetWorldRadius(),
+                sphereDistance
+            );
+
+            if (!hitSphere) {
+                // Ray-ul nu atinge nici sfera â†’ skip complet
+                continue;
+            }
+
+            // â”€â”€â”€ PASUL 3: Test precis cu mesh-ul â”€â”€â”€
+            // Triangle test e O(n) dar ruleaza DOAR pe obiectele care au trecut sphere test
+            glm::mat4 modelMatrix = obj->GetTransform().GetModelMatrix();
+            float meshDistance = 0.0f;
+            glm::vec3 hitPoint;
+
+            bool hitMesh = RayIntersectsModelWithMatrix(
+                ray,
+                *obj->GetModel(),
+                modelMatrix,
+                meshDistance,
+                hitPoint
+            );
+
+            if (hitMesh && meshDistance < closestDistance) {
+                closestDistance = meshDistance;
+                closestID = obj->GetID();
+                closestName = obj->GetName();
+            }
+        }
+
+        // â”€â”€â”€ PASUL 4: Selecteaza cel mai apropiat â”€â”€â”€
+        if (closestID >= 0) {
+            AddToSelection(closestID);
+            std::cout << " Raycast HIT: '" << closestName
+                << "' (ID: " << closestID
+                << ") at distance: " << closestDistance << std::endl;
+        }
+        else {
+            std::cout << "Raycast MISS at (" << screenPos.x << ", " << screenPos.y << ")" << std::endl;
+        }
     }
 
     // ===========================
@@ -214,7 +297,7 @@ namespace gps {
         if (!m_isBoxSelecting) return;
         if (!m_initialized) return;
 
-        // Verificã dimensiunea minimã pentru rendering
+        // VerificÄƒ dimensiunea minimÄƒ pentru rendering
         float boxWidth = std::abs(m_boxEnd.x - m_boxStart.x);
         float boxHeight = std::abs(m_boxEnd.y - m_boxStart.y);
 
@@ -226,18 +309,18 @@ namespace gps {
         // Update mesh
         UpdateBoxMesh();
 
-        // Use shader (dacã e încãrcat) sau deseneazã fãrã shader
+        // Use shader (dacÄƒ e Ã®ncÄƒrcat) sau deseneazÄƒ fÄƒrÄƒ shader
         if (m_shaderLoaded) {
             m_boxShader.useShaderProgram();
             GLuint colorLoc = glGetUniformLocation(m_boxShader.shaderProgram, "boxColor");
             glUniform4fv(colorLoc, 1, &m_boxColor[0]);
         }
 
-        // Deseneazã box-ul (fill)
+        // DeseneazÄƒ box-ul (fill)
         glBindVertexArray(m_boxVAO);
         glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-        // Deseneazã marginea (outline)
+        // DeseneazÄƒ marginea (outline)
         glLineWidth(2.0f);
         if (m_shaderLoaded) {
             GLuint colorLoc = glGetUniformLocation(m_boxShader.shaderProgram, "boxColor");
@@ -265,12 +348,12 @@ namespace gps {
     // ===========================
 
     bool SelectionSystem::IsSelectable(const SceneObject& obj) const {
-        // Selecteazã doar obiecte active cu anumite nume
+        // SelecteazÄƒ doar obiecte active cu anumite nume
         if (!obj.IsActive()) return false;
 
         std::string name = obj.GetName();
 
-        // Selecteazã trupe, orci, etc. (dar NU terenul, zidurile)
+        // SelecteazÄƒ trupe, orci, etc. (dar NU terenul, zidurile)
         return (name.find("Troop") != std::string::npos ||
             name.find("Orc") != std::string::npos ||
             name.find("Unit") != std::string::npos);
@@ -279,28 +362,28 @@ namespace gps {
     bool SelectionSystem::IsObjectInSelectionBox(const SceneObject& obj,
         const Camera& camera,
         const glm::mat4& projection) {
-        // Proiecteazã centrul obiectului în screen space
+        // ProiecteazÄƒ centrul obiectului Ã®n screen space
         glm::vec3 screenPos = ProjectToScreen(obj.GetWorldCenter(), camera, projection);
 
-        // Verificã dacã e în spatele camerei
+        // VerificÄƒ dacÄƒ e Ã®n spatele camerei
         if (screenPos.z < 0.0f || screenPos.z > 1.0f) {
             return false;
         }
 
-        // Converte?te în NDC
+        // Converte?te Ã®n NDC
         glm::vec2 startNDC = ScreenToNDC(m_boxStart);
         glm::vec2 endNDC = ScreenToNDC(m_boxEnd);
 
-        // Normalizeazã (min, max)
+        // NormalizeazÄƒ (min, max)
         float minX = std::min(startNDC.x, endNDC.x);
         float maxX = std::max(startNDC.x, endNDC.x);
         float minY = std::min(startNDC.y, endNDC.y);
         float maxY = std::max(startNDC.y, endNDC.y);
 
-        // Converte?te pozi?ia obiectului în NDC
+        // Converte?te pozi?ia obiectului Ã®n NDC
         glm::vec2 objNDC = ScreenToNDC(glm::vec2(screenPos.x, screenPos.y));
 
-        // Verificã dacã e în box
+        // VerificÄƒ dacÄƒ e Ã®n box
         return IsPointInBox(objNDC, glm::vec2(minX, minY), glm::vec2(maxX, maxY));
     }
 
@@ -338,11 +421,11 @@ namespace gps {
     }
 
     void SelectionSystem::UpdateBoxMesh() {
-        // Converte?te coordonatele screen în NDC pentru rendering
+        // Converte?te coordonatele screen Ã®n NDC pentru rendering
         glm::vec2 startNDC = ScreenToNDC(m_boxStart);
         glm::vec2 endNDC = ScreenToNDC(m_boxEnd);
 
-        // 4 vertices pentru quad (în sens anti-orar)
+        // 4 vertices pentru quad (Ã®n sens anti-orar)
         float vertices[] = {
             startNDC.x, startNDC.y,  // Bottom-left
             endNDC.x,   startNDC.y,  // Bottom-right
@@ -357,12 +440,12 @@ namespace gps {
     }
 
     void SelectionSystem::SetupRenderState() {
-        // Salveazã starea curentã (op?ional - pentru acum, doar setãm ce avem nevoie)
+        // SalveazÄƒ starea curentÄƒ (op?ional - pentru acum, doar setÄƒm ce avem nevoie)
 
         // Disable depth test pentru UI
         glDisable(GL_DEPTH_TEST);
 
-        // Enable blending pentru transparen?ã
+        // Enable blending pentru transparen?Äƒ
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 

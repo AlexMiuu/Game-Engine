@@ -1,90 +1,106 @@
+ï»¿//
+// TileManager.cpp
+// Implementarea TileManager REFACTORIZAT pentru noul SceneObject system
+//
+
 #include "TileManager.hpp"
+#include "Scene.hpp"
+#include "SceneObject.hpp"
+#include "Model3D.hpp"
 #include <iostream>
 #include <cmath>
-// CORECTARE: Nu mai include Model3D.hpp aici (e deja în TileManager.hpp)
+#include <limits>
 
 namespace gps {
 
     TileManager::TileManager(float tileSize)
-        : m_terrainModel(nullptr), m_tileSize(tileSize) {
+        : m_terrainModel(nullptr)
+        , m_scene(nullptr)
+        , m_tileSize(tileSize)
+    {
     }
 
-    void TileManager::Initialize(Model3D* terrainModel) {
+    // ===========================
+    // INITIALIZATION
+    // ===========================
+
+    void TileManager::Initialize(Model3D* terrainModel, Scene* scene) {
         m_terrainModel = terrainModel;
-        std::cout << "[TileManager] Initialized with tile size: " << m_tileSize << std::endl;
+        m_scene = scene;
+
+        std::cout << "[TileManager] Initialized with tile size: " << m_tileSize;
+        if (m_scene) {
+            std::cout << " (scene: " << m_scene->GetName() << ")";
+        }
+        std::cout << std::endl;
     }
+
+    // ===========================
+    // TILE CREATION / LOADING
+    // ===========================
 
     Tile* TileManager::CreateTile(int gridX, int gridZ, const std::string& terrainType) {
         GridKey key = { gridX, gridZ };
 
-        // Verifica daca tile-ul exista deja
         if (m_tiles.find(key) != m_tiles.end()) {
-            std::cout << "[TileManager] Tile at (" << gridX << ", " << gridZ
-                << ") already exists" << std::endl;
             return &m_tiles[key];
         }
 
-        // Calculeaza pozitia in world space
         glm::vec3 worldPos = GridToWorld(gridX, gridZ);
-
-        // Creeaza tile-ul nou
         Tile newTile(gridX, gridZ, worldPos, terrainType);
         m_tiles[key] = newTile;
-
-        std::cout << "[TileManager] Created tile at grid (" << gridX << ", " << gridZ
-            << ") world pos (" << worldPos.x << ", " << worldPos.y << ", "
-            << worldPos.z << ")" << std::endl;
 
         return &m_tiles[key];
     }
 
-    // CORECTARE: Actualizat sã foloseascã LegacySceneObject în loc de SceneObject
-    bool TileManager::LoadTile(int gridX, int gridZ,
-        std::vector<LegacySceneObject>& sceneObjects, int& nextID) {
+    bool TileManager::LoadTile(int gridX, int gridZ) {
+        if (!m_scene) {
+            std::cerr << "[TileManager] ERROR: No scene set! Call Initialize() first." << std::endl;
+            return false;
+        }
+
+        if (!m_terrainModel) {
+            std::cerr << "[TileManager] ERROR: No terrain model set!" << std::endl;
+            return false;
+        }
+
         GridKey key = { gridX, gridZ };
 
-        // Verifica daca tile-ul exista
+        // Creeaza tile-ul daca nu exista
         auto it = m_tiles.find(key);
         if (it == m_tiles.end()) {
-            std::cout << "[TileManager] Tile at (" << gridX << ", " << gridZ
-                << ") does not exist. Creating it..." << std::endl;
             CreateTile(gridX, gridZ);
             it = m_tiles.find(key);
         }
 
         Tile& tile = it->second;
 
-        // Verifica daca e deja incarcat
+        // Skip daca e deja incarcat
         if (tile.isLoaded) {
-            std::cout << "[TileManager] Tile at (" << gridX << ", " << gridZ
-                << ") is already loaded" << std::endl;
             return false;
         }
 
-        // Verifica daca avem model
-        if (!m_terrainModel) {
-            std::cerr << "[TileManager] ERROR: No terrain model set!" << std::endl;
+        // â”€â”€â”€ Creeaza SceneObject prin Scene â”€â”€â”€
+        int objID = CreateSceneObjectForTile(tile);
+
+        if (objID < 0) {
+            std::cerr << "[TileManager] Failed to create SceneObject for tile ("
+                << gridX << ", " << gridZ << ")" << std::endl;
             return false;
         }
 
-        // CORECTARE: Acum returneazã LegacySceneObject
-        LegacySceneObject obj = CreateSceneObjectForTile(tile, nextID);
-        sceneObjects.push_back(obj);
-
-        // Actualizeaza tile
-        tile.sceneObjectId = nextID;
+        tile.sceneObjectId = objID;
         tile.isLoaded = true;
-        nextID++;
 
-        std::cout << "[TileManager] Loaded tile at grid (" << gridX << ", " << gridZ
-            << ") with ID " << tile.sceneObjectId << std::endl;
+        std::cout << "[TileManager] Loaded tile (" << gridX << ", " << gridZ
+            << ") â†’ SceneObject ID: " << objID << std::endl;
 
         return true;
     }
 
-    // CORECTARE: Actualizat sã foloseascã LegacySceneObject
-    bool TileManager::UnloadTile(int gridX, int gridZ,
-        std::vector<LegacySceneObject>& sceneObjects) {
+    bool TileManager::UnloadTile(int gridX, int gridZ) {
+        if (!m_scene) return false;
+
         GridKey key = { gridX, gridZ };
 
         auto it = m_tiles.find(key);
@@ -93,34 +109,98 @@ namespace gps {
         }
 
         Tile& tile = it->second;
-        int objectId = tile.sceneObjectId;
 
-        // Sterge din sceneObjects
-        for (auto objIt = sceneObjects.begin(); objIt != sceneObjects.end(); ++objIt) {
-            if (objIt->id == objectId) {
-                sceneObjects.erase(objIt);
-                std::cout << "[TileManager] Unloaded tile at grid (" << gridX << ", "
-                    << gridZ << ") with ID " << objectId << std::endl;
-                break;
-            }
-        }
+        // â”€â”€â”€ Sterge SceneObject-ul din scena â”€â”€â”€
+        m_scene->DestroyObject(tile.sceneObjectId);
 
-        // Actualizeaza tile
+        std::cout << "[TileManager] Unloaded tile (" << gridX << ", " << gridZ
+            << ") SceneObject ID: " << tile.sceneObjectId << std::endl;
+
         tile.isLoaded = false;
         tile.sceneObjectId = -1;
 
         return true;
     }
 
+    // ===========================
+    // BATCH OPERATIONS
+    // ===========================
+
+    void TileManager::LoadTilesInRadius(const glm::vec3& centerPos, float radius) {
+        int centerGridX, centerGridZ;
+        WorldToGrid(centerPos, centerGridX, centerGridZ);
+
+        int radiusTiles = static_cast<int>(std::ceil(radius / m_tileSize));
+
+        int loadedCount = 0;
+        for (int x = centerGridX - radiusTiles; x <= centerGridX + radiusTiles; ++x) {
+            for (int z = centerGridZ - radiusTiles; z <= centerGridZ + radiusTiles; ++z) {
+                glm::vec3 tileWorldPos = GridToWorld(x, z);
+                float dist = glm::distance(centerPos, tileWorldPos);
+
+                if (dist <= radius) {
+                    if (!HasTile(x, z)) {
+                        CreateTile(x, z);
+                    }
+                    if (LoadTile(x, z)) {
+                        loadedCount++;
+                    }
+                }
+            }
+        }
+
+        if (loadedCount > 0) {
+            std::cout << "[TileManager] Loaded " << loadedCount << " tiles in radius " << radius << std::endl;
+        }
+    }
+
+    void TileManager::UnloadTilesOutsideRadius(const glm::vec3& centerPos, float radius) {
+        std::vector<GridKey> tilesToUnload;
+
+        for (auto& pair : m_tiles) {
+            if (pair.second.isLoaded) {
+                float dist = glm::distance(centerPos, pair.second.worldPos);
+                if (dist > radius) {
+                    tilesToUnload.push_back(pair.first);
+                }
+            }
+        }
+
+        for (const auto& key : tilesToUnload) {
+            UnloadTile(key.x, key.z);
+        }
+    }
+
+    void TileManager::GenerateGrid(int minX, int maxX, int minZ, int maxZ,
+        const std::string& terrainType) {
+        for (int x = minX; x <= maxX; ++x) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                CreateTile(x, z, terrainType);
+            }
+        }
+        std::cout << "[TileManager] Generated grid (" << minX << "," << minZ
+            << ") to (" << maxX << "," << maxZ << ") = " << m_tiles.size() << " tiles" << std::endl;
+    }
+
+    void TileManager::GenerateAndLoadGrid(int minX, int maxX, int minZ, int maxZ,
+        const std::string& terrainType) {
+        for (int x = minX; x <= maxX; ++x) {
+            for (int z = minZ; z <= maxZ; ++z) {
+                CreateTile(x, z, terrainType);
+                LoadTile(x, z);
+            }
+        }
+        std::cout << "[TileManager] Generated and loaded grid: " << m_tiles.size() << " tiles" << std::endl;
+    }
+
+    // ===========================
+    // QUERIES
+    // ===========================
+
     Tile* TileManager::GetTile(int gridX, int gridZ) {
         GridKey key = { gridX, gridZ };
         auto it = m_tiles.find(key);
-
-        if (it != m_tiles.end()) {
-            return &it->second;
-        }
-
-        return nullptr;
+        return (it != m_tiles.end()) ? &it->second : nullptr;
     }
 
     bool TileManager::HasTile(int gridX, int gridZ) const {
@@ -128,71 +208,10 @@ namespace gps {
         return m_tiles.find(key) != m_tiles.end();
     }
 
-    // CORECTARE: Actualizat sã foloseascã LegacySceneObject
-    void TileManager::LoadTilesInRadius(const glm::vec3& centerPos, float radius,
-        std::vector<LegacySceneObject>& sceneObjects, int& nextID) {
-        // Converti pozitia centrala la grid
-        int centerGridX, centerGridZ;
-        WorldToGrid(centerPos, centerGridX, centerGridZ);
-
-        // Calculeaza range-ul de tile-uri
-        int radiusTiles = static_cast<int>(std::ceil(radius / m_tileSize));
-
-        // Incarca toate tile-urile in raza
-        for (int x = centerGridX - radiusTiles; x <= centerGridX + radiusTiles; ++x) {
-            for (int z = centerGridZ - radiusTiles; z <= centerGridZ + radiusTiles; ++z) {
-                // Verifica distanta
-                glm::vec3 tileWorldPos = GridToWorld(x, z);
-                float dist = glm::distance(centerPos, tileWorldPos);
-
-                if (dist <= radius) {
-                    // Creeaza tile daca nu exista
-                    if (!HasTile(x, z)) {
-                        CreateTile(x, z);
-                    }
-
-                    // Incarca tile
-                    LoadTile(x, z, sceneObjects, nextID);
-                }
-            }
-        }
-    }
-
-    // CORECTARE: Actualizat sã foloseascã LegacySceneObject
-    void TileManager::UnloadTilesOutsideRadius(const glm::vec3& centerPos, float radius,
-        std::vector<LegacySceneObject>& sceneObjects) {
-        std::vector<GridKey> tilesToUnload;
-
-        // Gaseste toate tile-urile care sunt in afara razei
-        for (auto& pair : m_tiles) {
-            if (pair.second.isLoaded) {
-                glm::vec3 tilePos = pair.second.worldPos;
-                float dist = glm::distance(centerPos, tilePos);
-
-                if (dist > radius) {
-                    tilesToUnload.push_back(pair.first);
-                }
-            }
-        }
-
-        // Descarca tile-urile
-        for (const auto& key : tilesToUnload) {
-            UnloadTile(key.x, key.z, sceneObjects);
-        }
-    }
-
-    void TileManager::GenerateGrid(int minX, int maxX, int minZ, int maxZ,
-        const std::string& terrainType) {
-        std::cout << "[TileManager] Generating grid from (" << minX << "," << minZ
-            << ") to (" << maxX << "," << maxZ << ")" << std::endl;
-
-        for (int x = minX; x <= maxX; ++x) {
-            for (int z = minZ; z <= maxZ; ++z) {
-                CreateTile(x, z, terrainType);
-            }
-        }
-
-        std::cout << "[TileManager] Generated " << m_tiles.size() << " tiles" << std::endl;
+    SceneObject* TileManager::GetTileSceneObject(int gridX, int gridZ) {
+        Tile* tile = GetTile(gridX, gridZ);
+        if (!tile || !tile->isLoaded || !m_scene) return nullptr;
+        return m_scene->GetObjectByID(tile->sceneObjectId);
     }
 
     void TileManager::WorldToGrid(const glm::vec3& worldPos, int& outGridX, int& outGridZ) const {
@@ -201,44 +220,74 @@ namespace gps {
     }
 
     glm::vec3 TileManager::GridToWorld(int gridX, int gridZ) const {
-        // Centreaza tile-ul la pozitia grid
         float worldX = gridX * m_tileSize + (m_tileSize * 0.5f);
         float worldZ = gridZ * m_tileSize + (m_tileSize * 0.5f);
-
         return glm::vec3(worldX, 0.0f, worldZ);
     }
 
     std::vector<Tile*> TileManager::GetLoadedTiles() {
-        std::vector<Tile*> loadedTiles;
-
+        std::vector<Tile*> result;
         for (auto& pair : m_tiles) {
             if (pair.second.isLoaded) {
-                loadedTiles.push_back(&pair.second);
+                result.push_back(&pair.second);
             }
         }
-
-        return loadedTiles;
+        return result;
     }
 
     std::vector<Tile*> TileManager::GetAllTiles() {
-        std::vector<Tile*> allTiles;
-
+        std::vector<Tile*> result;
         for (auto& pair : m_tiles) {
-            allTiles.push_back(&pair.second);
+            result.push_back(&pair.second);
         }
-
-        return allTiles;
+        return result;
     }
 
+    int TileManager::GetLoadedCount() const {
+        int count = 0;
+        for (const auto& pair : m_tiles) {
+            if (pair.second.isLoaded) count++;
+        }
+        return count;
+    }
+
+    // ===========================
+    // CLEANUP
+    // ===========================
+
     void TileManager::Clear() {
+        // Descarca toate tile-urile din scena
+        UnloadAll();
+
+        // Sterge datele interne
         m_tiles.clear();
         std::cout << "[TileManager] Cleared all tiles" << std::endl;
     }
+
+    void TileManager::UnloadAll() {
+        if (!m_scene) return;
+
+        for (auto& pair : m_tiles) {
+            Tile& tile = pair.second;
+            if (tile.isLoaded) {
+                m_scene->DestroyObject(tile.sceneObjectId);
+                tile.isLoaded = false;
+                tile.sceneObjectId = -1;
+            }
+        }
+        std::cout << "[TileManager] Unloaded all tiles" << std::endl;
+    }
+
+    // ===========================
+    // DEBUG
+    // ===========================
 
     void TileManager::PrintDebugInfo() const {
         std::cout << "\n=== TileManager Debug Info ===" << std::endl;
         std::cout << "Tile Size: " << m_tileSize << std::endl;
         std::cout << "Total Tiles: " << m_tiles.size() << std::endl;
+        std::cout << "Scene: " << (m_scene ? m_scene->GetName() : "NULL") << std::endl;
+        std::cout << "Terrain Model: " << (m_terrainModel ? "set" : "NULL") << std::endl;
 
         int loadedCount = 0;
         for (const auto& pair : m_tiles) {
@@ -249,29 +298,49 @@ namespace gps {
         std::cout << "==============================\n" << std::endl;
     }
 
-    // CORECTARE: Returneazã LegacySceneObject cu constructor implicit valid
-    LegacySceneObject TileManager::CreateSceneObjectForTile(const Tile& tile, int objectId) {
-        LegacySceneObject obj;  // Acum func?ioneazã - LegacySceneObject are constructor implicit
-        obj.id = objectId;
-        obj.modelPtr = m_terrainModel;
+    // ===========================
+    // PRIVATE HELPERS
+    // ===========================
 
-        // Creeaza matricea de transformare pentru tile
-        glm::mat4 T = glm::translate(glm::mat4(1.0f), tile.worldPos);
-        obj.modelMatrix = T;
-        obj.scale = glm::vec3(1.0f);
+    int TileManager::CreateSceneObjectForTile(const Tile& tile) {
+        if (!m_scene || !m_terrainModel) return -1;
 
-        // Calculeaza bounding sphere (simplificat)
-        // In mod normal ai vrea sa apelezi computeLocalBoundingSphere
-        obj.localCenter = glm::vec3(0.0f);
-        obj.localRadius = m_tileSize * 0.5f;
+        // Creeaza un SceneObject real in scena
+        std::string tileName = "Tile_" + std::to_string(tile.gridX) + "_" + std::to_string(tile.gridZ);
+        SceneObject* obj = m_scene->CreateObject(tileName);
 
-        // Calculeaza world bounds
-        // CORECTARE: Constructor corect pentru glm::vec4 (4 parametri)
-        glm::vec4 c = obj.modelMatrix * glm::vec4(obj.localCenter.x, obj.localCenter.y, obj.localCenter.z, 1.0f);
-        obj.worldCenter = glm::vec3(c.x, c.y, c.z);
-        obj.worldRadius = obj.localRadius;
+        if (!obj) return -1;
 
-        return obj;
+        // Seteaza modelul
+        obj->SetModel(m_terrainModel);
+
+        // Seteaza transform
+        obj->GetTransform().SetPosition(tile.worldPos);
+        obj->GetTransform().SetScale(glm::vec3(1.0f));
+
+        // Calculeaza bounding sphere
+        glm::vec3 center;
+        float radius;
+        ComputeLocalBoundingSphere(m_terrainModel, center, radius);
+        obj->SetLocalBounds(center, radius);
+        obj->UpdateWorldBounds();
+
+        return obj->GetID();
+    }
+
+    void TileManager::ComputeLocalBoundingSphere(Model3D* model, glm::vec3& outCenter, float& outRadius) {
+        glm::vec3 minPos(std::numeric_limits<float>::max());
+        glm::vec3 maxPos(std::numeric_limits<float>::lowest());
+
+        for (const auto& mesh : model->getMeshes()) {
+            for (const auto& vertex : mesh.vertices) {
+                minPos = glm::min(minPos, vertex.Position);
+                maxPos = glm::max(maxPos, vertex.Position);
+            }
+        }
+
+        outCenter = 0.5f * (minPos + maxPos);
+        outRadius = glm::length(maxPos - minPos) * 0.5f;
     }
 
 } // namespace gps
