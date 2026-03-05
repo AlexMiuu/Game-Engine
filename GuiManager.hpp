@@ -1,0 +1,123 @@
+//
+// GuiManager.hpp
+// GUI Manager pentru RTS — layout stil Warcraft/Starcraft
+//
+
+#ifndef GUI_MANAGER_HPP
+#define GUI_MANAGER_HPP
+
+#if defined (__APPLE__)
+#define GLFW_INCLUDE_GLCOREARB
+#define GL_SILENCE_DEPRECATION
+#else
+#define GLEW_STATIC
+#include <GL/glew.h>
+#endif
+
+#include <GLFW/glfw3.h>
+
+#include "imGUI/imgui.h"
+#include "imGUI/imgui_impl_glfw.h"
+#include "imGUI/imgui_impl_opengl3.h"
+
+#include <string>
+#include <functional>
+#include <vector>
+#include <glm/glm.hpp>
+
+namespace gps {
+
+    // Forward declarations
+    class Scene;
+    class SceneManager;
+    class SelectionSystem;
+
+    struct GuiButton {
+        std::string label;
+        std::function<void()> callback;
+        glm::vec4 color = glm::vec4(0.0f);
+        std::string tooltip = "";
+        bool enabled = true;
+    };
+
+    class GuiManager {
+    public:
+        GuiManager();
+        ~GuiManager();
+
+        GuiManager(const GuiManager&) = delete;
+        GuiManager& operator=(const GuiManager&) = delete;
+
+        // Lifecycle
+        void Initialize(GLFWwindow* window, const char* glslVersion = "#version 410");
+        void Shutdown();
+        void BeginFrame();
+        void EndFrame();
+
+        // Render all panels
+        void RenderAllPanels();
+
+        // Individual panels
+        void RenderTopBar();
+        void RenderCommandPanel();
+        void RenderUnitInfoPanel();
+        void RenderDebugPanel();
+
+        // Button system
+        void AddButton(const GuiButton& button);
+        void ClearButtons();
+
+        // Data binding
+        void BindSystems(Scene* scene, SceneManager* sceneManager, SelectionSystem* selectionSystem);
+        void SetCameraPosition(const glm::vec3& pos) { m_cameraPos = pos; }
+        void SetDeltaTime(float dt) { m_deltaTime = dt; }
+        void SetZoomFactor(float zoom) { m_zoomFactor = zoom; }
+
+        // Panel toggles
+        void SetDebugPanelVisible(bool v) { m_showDebugPanel = v; }
+        bool IsDebugPanelVisible() const { return m_showDebugPanel; }
+
+        // Mouse/keyboard capture
+        bool WantsMouseInput() const;
+        bool WantsKeyboardInput() const;
+
+        // Debug toggles — citeste-le din main.cpp
+        bool isWireframeEnabled = false;
+        bool showCollisionBoxes = false;
+        bool showBoundingSpheres = false;
+
+        // Spawn config — editabile din GUI
+        int spawnFormationCount = 10;
+        float spawnFormationSpacing = 15.0f;
+
+    private:
+        bool m_initialized;
+        GLFWwindow* m_window;
+
+        bool m_showDebugPanel;
+
+        std::vector<GuiButton> m_buttons;
+
+        // System references
+        Scene* m_scene;
+        SceneManager* m_sceneManager;
+        SelectionSystem* m_selectionSystem;
+
+        // Cached data
+        glm::vec3 m_cameraPos;
+        float m_deltaTime;
+        float m_zoomFactor;
+
+        // FPS tracking (media pe mai multe frame-uri)
+        float m_fpsHistory[120];
+        int m_fpsHistoryIdx;
+
+        void ApplyCustomStyle();
+
+        // Helper: deseneaza un buton colorat cu dimensiune fixa
+        bool ColoredButton(const char* label, ImVec2 size, ImVec4 color, ImVec4 hoverColor);
+    };
+
+} // namespace gps
+
+#endif // GUI_MANAGER_HPP

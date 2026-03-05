@@ -39,6 +39,8 @@
 #include "SceneManager.hpp"           // Manager pentru spawn și init
 #include "SelectionSystem.hpp"        // Box selection
 
+#include "GuiManager.hpp"
+
 // ===========================
 // WINDOW SETTINGS
 // ===========================
@@ -135,6 +137,8 @@ gps::Scene* g_scene = nullptr;
 gps::SceneManager* g_sceneManager = nullptr;
 gps::SelectionSystem* g_selectionSystem = nullptr;
 
+gps::GuiManager* g_guiManager = nullptr;
+
 // ===========================
 // TIME
 // ===========================
@@ -167,6 +171,7 @@ void initTileManager();
 void initSceneManager();
 void initSelectionSystem();
 
+void initGui();
 void processMovement();
 void updateDeltaTime();
 void renderScene(gps::Shader shader);
@@ -205,6 +210,10 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mode
     // Forward către InputManager
     gps::InputManager::Instance().OnKeyEvent(key, scancode, action, mode);
 
+    if (g_guiManager && g_guiManager->WantsKeyboardInput()) {
+        return;
+    }
+
     // ESC pentru exit
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GL_TRUE);
@@ -214,6 +223,10 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mode
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     // Forward către InputManager
     gps::InputManager::Instance().OnMouseButton(button, action, mods);
+
+    if (g_guiManager && g_guiManager->WantsMouseInput()) {
+        return;
+    }
 
     if (!g_selectionSystem || !g_scene) return;
 
@@ -289,6 +302,44 @@ void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
 
     // Update projection
     windowResizeCallback(window, glWindowWidth, glWindowHeight);
+}
+
+//
+// GUI INIT
+//
+
+void initGui() {
+    g_guiManager = new gps::GuiManager();
+    g_guiManager->Initialize(glWindow, "#version 410");
+
+    // Conecteaza sistemele existente
+    g_guiManager->BindSystems(g_scene, g_sceneManager, g_selectionSystem);
+
+    // ─── Adauga butoane custom (optional) ───
+
+    // Buton: Spawn Dragon
+    gps::GuiButton dragonBtn;
+    dragonBtn.label = "🐉 Spawn Dragon";
+    dragonBtn.tooltip = "Spawneaza un dragon la pozitia default";
+    dragonBtn.color = glm::vec4(0.6f, 0.2f, 0.2f, 1.0f);
+    dragonBtn.callback = [&]() {
+        g_sceneManager->SpawnObject("Dragon", "dragon",
+            glm::vec3(50.0f, -60.0f, -50.0f), glm::vec3(0.5f));
+        };
+    g_guiManager->AddButton(dragonBtn);
+
+    // Buton: Toggle Spawn
+    gps::GuiButton toggleSpawnBtn;
+    toggleSpawnBtn.label = "🔄 Toggle Spawn";
+    toggleSpawnBtn.tooltip = "Activeaza/dezactiveaza spawn-ul";
+    toggleSpawnBtn.callback = [&]() {
+        bool current = g_sceneManager->IsSpawnEnabled();
+        g_sceneManager->SetSpawnEnabled(!current);
+        std::cout << "Spawn " << (!current ? "ENABLED" : "DISABLED") << std::endl;
+        };
+    g_guiManager->AddButton(toggleSpawnBtn);
+
+    std::cout << "✅ GUI initialized" << std::endl;
 }
 
 // ===========================
@@ -479,7 +530,7 @@ void initSceneManager() {
 
     g_tileManager.Initialize(&sceneModel, g_scene);
     // Optional: genereaza si incarca un grid 3x3
-    g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
+    //g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
 
     // 4. Setup scena
     g_sceneManager->SetupScene();
@@ -509,6 +560,9 @@ void initSelectionSystem() {
 void processMovement() {
     auto& input = gps::InputManager::Instance();
 
+    if (g_guiManager && g_guiManager->WantsKeyboardInput()) return;
+
+
     // Camera movement
     if (input.IsKeyPressed(GLFW_KEY_W)) {
         myCamera.move(gps::MOVE_UP, cameraSpeed * deltaTime);
@@ -523,6 +577,19 @@ void processMovement() {
         myCamera.move(gps::MOVE_RIGHT, cameraSpeed * deltaTime);
     }
 
+    if (input.IsKeyJustPressed(GLFW_KEY_F1)) {
+        if (g_guiManager) {
+            g_guiManager->SetDebugPanelVisible(!g_guiManager->IsDebugPanelVisible());
+        }
+    }
+
+    /*
+    if (input.IsKeyJustPressed(GLFW_KEY_F2)) {
+        if (g_guiManager) {
+            g_guiManager->SetControlPanelVisible(!g_guiManager->IsControlPanelVisible());
+        }
+    }
+*/
     // Spawn trupe
     if (input.IsKeyJustPressed(GLFW_KEY_B)) {
         glm::vec3 spawnPos = g_sceneManager->GetTroopSpawnPosition();
@@ -681,6 +748,7 @@ int main(int argc, const char* argv[]) {
     // Init NEW SYSTEMS
     initSceneManager();
     initSelectionSystem();
+    initGui();
 
     std::cout << "✅ Initialization complete!" << std::endl;
     std::cout << "\n🎮 CONTROLS:" << std::endl;
@@ -750,7 +818,14 @@ int main(int argc, const char* argv[]) {
     glUniform3fv(viewPosEyeLoc, 1, glm::value_ptr(cameraPosEye));
 
 
-
+    if (g_guiManager) {
+        g_guiManager->SetDeltaTime(deltaTime);
+        g_guiManager->SetCameraPosition(myCamera.getCameraPosition());
+        g_guiManager->SetZoomFactor(zoomFactor);    
+        g_guiManager->BeginFrame();
+        g_guiManager->RenderAllPanels();
+        g_guiManager->EndFrame();
+    }
         //RENDER
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -789,12 +864,20 @@ int main(int argc, const char* argv[]) {
             g_selectionSystem->Render();
         }
 
+        if (g_guiManager) {
+            g_guiManager->BeginFrame();
+            g_guiManager->RenderAllPanels();
+            g_guiManager->EndFrame();
+        }
+
+
         // Swap buffers
         glfwPollEvents();
         glfwSwapBuffers(glWindow);
     }
 
     // Cleanup
+    delete g_guiManager;
     delete g_scene;
     delete g_sceneManager;
     delete g_selectionSystem;
