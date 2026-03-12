@@ -21,7 +21,15 @@
   <ItemGroup>
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="CameraIso.cpp" />
+    <ClCompile Include="CollisionSystem.cpp" />
     <ClCompile Include="Component.cpp" />
+    <ClCompile Include="GuiManager.cpp" />
+    <ClCompile Include="imGUI\imgui.cpp" />
+    <ClCompile Include="imGUI\imgui_draw.cpp" />
+    <ClCompile Include="imGUI\imgui_impl_glfw.cpp" />
+    <ClCompile Include="imGUI\imgui_impl_opengl3.cpp" />
+    <ClCompile Include="imGUI\imgui_tables.cpp" />
+    <ClCompile Include="imGUI\imgui_widgets.cpp" />
     <ClCompile Include="InputManager.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Mesh.cpp" />
@@ -40,12 +48,15 @@
   <ItemGroup>
     <ClInclude Include="Camera.hpp" />
     <ClInclude Include="CameraIso.hpp" />
+    <ClInclude Include="CollisionSystem.hpp" />
     <ClInclude Include="Component.hpp" />
+    <ClInclude Include="GuiManager.hpp" />
     <ClInclude Include="Header.h" />
     <ClInclude Include="InputManager.hpp" />
     <ClInclude Include="Mesh.hpp" />
     <ClInclude Include="Model3D.hpp" />
     <ClInclude Include="RayCaster.hpp" />
+    <ClInclude Include="resource.h" />
     <ClInclude Include="Scene.hpp" />
     <ClInclude Include="SceneManager.hpp" />
     <ClInclude Include="SceneObject.hpp" />
@@ -54,6 +65,9 @@
     <ClInclude Include="SkyBox.hpp" />
     <ClInclude Include="TileManager.hpp" />
     <ClInclude Include="Transform.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="LAB8_PG.rc" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>
@@ -127,6 +141,7 @@
       <SDLCheck>true</SDLCheck>
       <PreprocessorDefinitions>WIN32;NDEBUG;_CONSOLE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <ConformanceMode>true</ConformanceMode>
+      <AdditionalIncludeDirectories>C:\Facultate\AN3_FAC\SEM1\OpenGL dev libs\include;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>

@@ -356,7 +356,7 @@ namespace gps {
         // Selectează trupe, orci, etc. (dar NU terenul, zidurile)
         return (name.find("Troop") != std::string::npos ||
             name.find("Orc") != std::string::npos ||
-            name.find("Unit") != std::string::npos);
+            name.find("Pikeman") != std::string::npos);
     }
 
     bool SelectionSystem::IsObjectInSelectionBox(const SceneObject& obj,

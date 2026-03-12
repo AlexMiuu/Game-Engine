@@ -1,6 +1,6 @@
 //
 // GuiManager.hpp
-// GUI Manager pentru RTS — layout stil Warcraft/Starcraft
+// GUI Manager pentru RTS ï¿½ layout stil Warcraft/Starcraft
 //
 
 #ifndef GUI_MANAGER_HPP
@@ -31,6 +31,7 @@ namespace gps {
     class Scene;
     class SceneManager;
     class SelectionSystem;
+    class TileManager;
 
     struct GuiButton {
         std::string label;
@@ -68,7 +69,7 @@ namespace gps {
         void ClearButtons();
 
         // Data binding
-        void BindSystems(Scene* scene, SceneManager* sceneManager, SelectionSystem* selectionSystem);
+        void BindSystems(Scene* scene, SceneManager* sceneManager, SelectionSystem* selectionSystem, TileManager* tileManager = nullptr);
         void SetCameraPosition(const glm::vec3& pos) { m_cameraPos = pos; }
         void SetDeltaTime(float dt) { m_deltaTime = dt; }
         void SetZoomFactor(float zoom) { m_zoomFactor = zoom; }
@@ -81,12 +82,12 @@ namespace gps {
         bool WantsMouseInput() const;
         bool WantsKeyboardInput() const;
 
-        // Debug toggles — citeste-le din main.cpp
+        // Debug toggles ï¿½ citeste-le din main.cpp
         bool isWireframeEnabled = false;
         bool showCollisionBoxes = false;
         bool showBoundingSpheres = false;
 
-        // Spawn config — editabile din GUI
+        // Spawn config ï¿½ editabile din GUI
         int spawnFormationCount = 10;
         float spawnFormationSpacing = 15.0f;
 
@@ -102,6 +103,10 @@ namespace gps {
         Scene* m_scene;
         SceneManager* m_sceneManager;
         SelectionSystem* m_selectionSystem;
+        TileManager* m_tileManager;
+
+        // Tile spawn config
+        int m_tileGridSize;
 
         // Cached data
         glm::vec3 m_cameraPos;

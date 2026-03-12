@@ -13,8 +13,8 @@ namespace gps {
     SceneManager::SceneManager()
         : m_scene(nullptr)
         , m_tileManager(nullptr)
-        , m_nextTroopID(100)  // Începe de la 100 pentru trupe
-        , m_nextObjectID(1)   // Începe de la 1 pentru obiecte generale
+        , m_nextTroopID(100)  // ï¿½ncepe de la 100 pentru trupe
+        , m_nextObjectID(1)   // ï¿½ncepe de la 1 pentru obiecte generale
         , m_spawnEnabled(true)
         , m_troopSpawnPos(100.0f, -60.0f, -90.0f)
         , m_troopCount(0)
@@ -22,7 +22,7 @@ namespace gps {
     }
 
     SceneManager::~SceneManager() {
-        // Scene-ul e gestionat extern, nu îl ?tergem aici
+        // Scene-ul e gestionat extern, nu ï¿½l ?tergem aici
     }
 
     // ===========================
@@ -37,9 +37,9 @@ namespace gps {
     }
 
     void SceneManager::LoadModels() {
-        // Aceastã metodã poate fi extinsã pentru a încãrca modele
-        // Pentru moment, presupunem cã modelele sunt încãrcate extern
-        // ?i înregistrate cu RegisterModel()
+        // Aceastï¿½ metodï¿½ poate fi extinsï¿½ pentru a ï¿½ncï¿½rca modele
+        // Pentru moment, presupunem cï¿½ modelele sunt ï¿½ncï¿½rcate extern
+        // ?i ï¿½nregistrate cu RegisterModel()
 
         std::cout << "?? Models loaded (external)" << std::endl;
     }
@@ -52,7 +52,7 @@ namespace gps {
 
         std::cout << "?? Setting up scene..." << std::endl;
 
-        // Creeazã componentele scenei
+        // Creeazï¿½ componentele scenei
         CreateTerrain();
         CreateStaticObjects();
         CreateInitialTroops(5);
@@ -76,28 +76,31 @@ namespace gps {
             return nullptr;
         }
 
-        // Gãse?te modelul
+        // Gï¿½se?te modelul
         Model3D* model = GetModel(modelName);
         if (!model) {
             std::cerr << "? Model '" << modelName << "' not found!" << std::endl;
             return nullptr;
         }
 
-        // Creeazã obiectul
+        // Creeazï¿½ obiectul
         int troopID = GetNextTroopID();
         SceneObject* troop = m_scene->CreateObject("Troop_" + std::to_string(troopID));
 
-        // Configureazã transform
+        // Configureazï¿½ transform
         troop->GetTransform().SetPosition(position);
         troop->GetTransform().SetScale(glm::vec3(1,1,1));
 
-        // Seteazã modelul
+        // Seteazï¿½ modelul
         troop->SetModel(model);
 
-        // Calculeazã bounding sphere
+        // Calculeazï¿½ bounding sphere
         ComputeAndSetBoundingSphere(troop, model);
 
-        // Incrementeazã counter
+        // Set collision radius
+        troop->SetCollisionRadius(5.0f);
+
+        // Incrementeazï¿½ counter
         m_troopCount++;
 
         std::cout << "??? Spawned troop " << troopID << " at position ("
@@ -116,7 +119,7 @@ namespace gps {
 
         if (count <= 0) return troops;
 
-        // Calculeazã grid pentru forma?ie
+        // Calculeazï¿½ grid pentru forma?ie
         int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(count))));
 
         for (int i = 0; i < count; i++) {
@@ -211,13 +214,13 @@ namespace gps {
     void SceneManager::CreateInitialTroops(int count) {
         std::cout << "??? Creating initial troops (" << count << ")..." << std::endl;
 
-        Model3D* orcModel = GetModel("orc");
+        Model3D* orcModel = GetModel("pikeman");
         if (!orcModel) {
             std::cout << "?? Orc model not found, skipping troops" << std::endl;
             return;
         }
 
-        // Spawn în forma?ie la pozi?ia ini?ialã
+        // Spawn ï¿½n forma?ie la pozi?ia ini?ialï¿½
         float spacing = 15.0f;
         int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(count))));
 
@@ -235,6 +238,9 @@ namespace gps {
             troop->SetModel(orcModel);
 
             ComputeAndSetBoundingSphere(troop, orcModel);
+
+            // Set collision radius
+            troop->SetCollisionRadius(5.0f);
 
             m_troopCount++;
         }

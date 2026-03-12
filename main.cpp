@@ -38,6 +38,7 @@
 #include "SceneObject.hpp"            // Obiecte cu componente
 #include "SceneManager.hpp"           // Manager pentru spawn și init
 #include "SelectionSystem.hpp"        // Box selection
+#include "CollisionSystem.hpp"        // Collision detection
 
 #include "GuiManager.hpp"
 
@@ -111,6 +112,7 @@ gps::Model3D orcModel;         // Trupe
 gps::Model3D dragon;           // Dragon
 gps::Model3D leftWingModel;    // Aripi
 gps::Model3D rightWingModel;
+gps::Model3D Pikeman;
 
 // ===========================
 // SKYBOX
@@ -136,6 +138,7 @@ gps::TileManager g_tileManager;
 gps::Scene* g_scene = nullptr;
 gps::SceneManager* g_sceneManager = nullptr;
 gps::SelectionSystem* g_selectionSystem = nullptr;
+gps::CollisionSystem* g_collisionSystem = nullptr;
 
 gps::GuiManager* g_guiManager = nullptr;
 
@@ -170,6 +173,7 @@ void initSkyBox();
 void initTileManager();
 void initSceneManager();
 void initSelectionSystem();
+void initCollisionSystem();
 
 void initGui();
 void processMovement();
@@ -252,6 +256,10 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         const auto& selectedIDs = g_selectionSystem->GetSelectedIDs();
         if (selectedIDs.empty()) return;
 
+        // Get tile grid bounds for clamping
+        glm::vec3 gridMin, gridMax;
+        bool hasGrid = g_tileManager.GetGridBounds(gridMin, gridMax);
+
         // Calculează formație
         int numSelected = selectedIDs.size();
         int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(numSelected))));
@@ -269,14 +277,20 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
             glm::vec3 formationPos = worldPos + glm::vec3(offsetX, 0.0f, offsetZ);
 
+            // Clamp destination to tile grid bounds
+            if (hasGrid) {
+                formationPos.x = glm::clamp(formationPos.x, gridMin.x, gridMax.x);
+                formationPos.z = glm::clamp(formationPos.z, gridMin.z, gridMax.z);
+            }
+
             // Setează movement
-            
+
             obj->movement.isMoving = true;
             obj->movement.moveStartPos = obj->GetTransform().GetPosition();
             obj->movement.moveEndPos = formationPos;
             obj->movement.moveStartTime = glfwGetTime();
             obj->movement.moveDuration = 2.0f;
-           
+
             idx++;
         }
 
@@ -313,7 +327,7 @@ void initGui() {
     g_guiManager->Initialize(glWindow, "#version 410");
 
     // Conecteaza sistemele existente
-    g_guiManager->BindSystems(g_scene, g_sceneManager, g_selectionSystem);
+    g_guiManager->BindSystems(g_scene, g_sceneManager, g_selectionSystem, &g_tileManager);
 
     // ─── Adauga butoane custom (optional) ───
 
@@ -428,6 +442,7 @@ void initModels() {
     sceneModel.LoadModel("objects/teren/teren.obj", "textures/");
     obiecte.LoadModel("objects/restobiecte/restobiecte.obj", "textures/");
     orcModel.LoadModel("objects/ORC/ORC.obj", "textures/");
+	Pikeman.LoadModel("objects/ORC/pikeman.obj", "textures/");
     dragon.LoadModel("objects/dragon/dragon.obj", "textures/");
     leftWingModel.LoadModel("objects/LEFTWING/LEFTWING.obj", "textures/");
     rightWingModel.LoadModel("objects/RIGHTWING/RIGHTWING.obj", "textures/");
@@ -527,10 +542,11 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("dragon", &dragon);
     g_sceneManager->RegisterModel("leftWing", &leftWingModel);
     g_sceneManager->RegisterModel("rightWing", &rightWingModel);
+	g_sceneManager->RegisterModel("pikeman", &Pikeman);
 
     g_tileManager.Initialize(&sceneModel, g_scene);
-    // Optional: genereaza si incarca un grid 3x3
-    //g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
+    // Generate initial 3x3 tile grid centered at origin
+    g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
 
     // 4. Setup scena
     g_sceneManager->SetupScene();
@@ -549,6 +565,12 @@ void initSelectionSystem() {
     g_selectionSystem->SetBoxColor(glm::vec4(0.3f, 0.6f, 1.0f, 0.3f));
 
     std::cout << "✅ SelectionSystem initialized" << std::endl;
+}
+
+void initCollisionSystem() {
+    g_collisionSystem = new gps::CollisionSystem();
+    g_collisionSystem->Initialize(g_scene);
+    std::cout << "✅ CollisionSystem initialized" << std::endl;
 }
 
 
@@ -748,6 +770,7 @@ int main(int argc, const char* argv[]) {
     // Init NEW SYSTEMS
     initSceneManager();
     initSelectionSystem();
+    initCollisionSystem();
     initGui();
 
     std::cout << "✅ Initialization complete!" << std::endl;
@@ -779,10 +802,15 @@ int main(int argc, const char* argv[]) {
 
         // Update troops movement
         double currentTime = glfwGetTime();
+        glm::vec3 gridBoundsMin, gridBoundsMax;
+        bool hasGridBounds = g_tileManager.GetGridBounds(gridBoundsMin, gridBoundsMax);
+
         for (const auto& objPtr : g_scene->GetObjects()) {
             gps::SceneObject* obj = objPtr.get();
 
             if (obj->movement.isMoving) {
+                glm::vec3 oldPos = obj->GetTransform().GetPosition();
+
                 float elapsed = static_cast<float>(currentTime) - obj->movement.moveStartTime;
                 float alpha = elapsed / obj->movement.moveDuration;
 
@@ -792,8 +820,22 @@ int main(int argc, const char* argv[]) {
                 }
 
                 glm::vec3 newPos = glm::mix(obj->movement.moveStartPos, obj->movement.moveEndPos, alpha);
+
+                // Clamp position to tile grid bounds
+                if (hasGridBounds) {
+                    newPos.x = glm::clamp(newPos.x, gridBoundsMin.x, gridBoundsMax.x);
+                    newPos.z = glm::clamp(newPos.z, gridBoundsMin.z, gridBoundsMax.z);
+                }
+
                 obj->GetTransform().SetPosition(newPos);
                 obj->UpdateWorldBounds();
+
+                // Collision check: revert and stop if colliding
+                if (g_collisionSystem && g_collisionSystem->CheckCollisions(obj)) {
+                    obj->GetTransform().SetPosition(oldPos);
+                    obj->UpdateWorldBounds();
+                    obj->movement.isMoving = false;
+                }
             }
         }
 
@@ -881,6 +923,7 @@ int main(int argc, const char* argv[]) {
     delete g_scene;
     delete g_sceneManager;
     delete g_selectionSystem;
+    delete g_collisionSystem;
 
     glfwDestroyWindow(glWindow);
     glfwTerminate();

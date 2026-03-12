@@ -57,6 +57,9 @@
     <ClCompile Include="SelectionSystem.cpp">
       <Filter>Source Files\Utils</Filter>
     </ClCompile>
+    <ClCompile Include="CollisionSystem.cpp">
+      <Filter>Source Files\Utils</Filter>
+    </ClCompile>
     <ClCompile Include="TileManager.cpp">
       <Filter>Source Files\Utils</Filter>
     </ClCompile>
@@ -90,6 +93,27 @@
     <ClCompile Include="tiny_obj_loader.cpp">
       <Filter>Source Files\Utils</Filter>
     </ClCompile>
+    <ClCompile Include="GuiManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imGUI\imgui_widgets.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imGUI\imgui_tables.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imGUI\imgui_draw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imGUI\imgui_impl_glfw.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imGUI\imgui_impl_opengl3.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="imGUI\imgui.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Scene.hpp">
@@ -108,6 +132,9 @@
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
     <ClInclude Include="SelectionSystem.hpp">
+      <Filter>Header Files\Utils</Filter>
+    </ClInclude>
+    <ClInclude Include="CollisionSystem.hpp">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
     <ClInclude Include="Camera.hpp">
@@ -140,5 +167,16 @@
     <ClInclude Include="Transform.hpp">
       <Filter>Header Files\Utils</Filter>
     </ClInclude>
+    <ClInclude Include="resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="GuiManager.hpp">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="LAB8_PG.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
   </ItemGroup>
 </Project>

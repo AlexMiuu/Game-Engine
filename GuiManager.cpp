@@ -7,6 +7,7 @@
 #include "Scene.hpp"
 #include "SceneManager.hpp"
 #include "SelectionSystem.hpp"
+#include "TileManager.hpp"
 #include <iostream>
 #include <cstring>
 #include <algorithm>
@@ -20,6 +21,8 @@ namespace gps {
         , m_scene(nullptr)
         , m_sceneManager(nullptr)
         , m_selectionSystem(nullptr)
+        , m_tileManager(nullptr)
+        , m_tileGridSize(3)
         , m_cameraPos(0.0f)
         , m_deltaTime(0.016f)
         , m_zoomFactor(1.0f)
@@ -139,6 +142,12 @@ namespace gps {
             ImGui::Text("Objects: %zu", m_scene->GetObjectCount());
         }
 
+        // Tiles
+        ImGui::SameLine(0, 30);
+        if (m_tileManager) {
+            ImGui::Text("Tiles: %d", m_tileManager->GetLoadedCount());
+        }
+
         // Selected
         ImGui::SameLine(0, 30);
         if (m_selectionSystem && m_selectionSystem->HasSelection()) {
@@ -165,7 +174,7 @@ namespace gps {
         ImGuiViewport* viewport = ImGui::GetMainViewport();
 
         float panelWidth = 280.0f;
-        float panelHeight = 320.0f;
+        float panelHeight = 620.0f;
         float margin = 10.0f;
 
         ImGui::SetNextWindowPos(
@@ -237,6 +246,52 @@ namespace gps {
             }
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Hotkey: C");
+
+        // ─── TILE GRID ───
+        if (m_tileManager) {
+            ImGui::SeparatorText("Tile Grid");
+
+            ImGui::Text("Loaded: %d / %d", m_tileManager->GetLoadedCount(), m_tileManager->GetTotalCount());
+            ImGui::Text("Tile Size: %.0f", m_tileManager->GetTileSize());
+
+            ImGui::SliderInt("Grid Size", &m_tileGridSize, 1, 7);
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("NxN grid centered at origin");
+
+            if (ColoredButton("Generate Grid", ImVec2(btnWidth, 35),
+                ImVec4(0.3f, 0.35f, 0.2f, 1.0f), ImVec4(0.4f, 0.5f, 0.25f, 1.0f)))
+            {
+                int half = m_tileGridSize / 2;
+                m_tileManager->Clear();
+                m_tileManager->GenerateAndLoadGrid(-half, half, -half, half);
+            }
+
+            ImGui::SameLine();
+
+            if (ColoredButton("Clear Tiles", ImVec2(btnWidth, 35),
+                ImVec4(0.45f, 0.2f, 0.2f, 1.0f), ImVec4(0.6f, 0.25f, 0.25f, 1.0f)))
+            {
+                m_tileManager->Clear();
+            }
+
+            // Single tile add/remove
+            ImGui::Spacing();
+            ImGui::Text("Add/Remove Single Tile:");
+
+            static int tileX = 0;
+            static int tileZ = 0;
+            ImGui::PushItemWidth(btnWidth - 20);
+            ImGui::InputInt("Tile X", &tileX);
+            ImGui::InputInt("Tile Z", &tileZ);
+            ImGui::PopItemWidth();
+
+            if (ImGui::Button("Add Tile", ImVec2(btnWidth, 28))) {
+                m_tileManager->LoadTile(tileX, tileZ);
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Remove Tile", ImVec2(btnWidth, 28))) {
+                m_tileManager->UnloadTile(tileX, tileZ);
+            }
+        }
 
         // ─── CUSTOM BUTTONS ───
         if (!m_buttons.empty()) {
@@ -487,10 +542,11 @@ namespace gps {
     // DATA BINDING
     // ===========================
 
-    void GuiManager::BindSystems(Scene* scene, SceneManager* sceneManager, SelectionSystem* selectionSystem) {
+    void GuiManager::BindSystems(Scene* scene, SceneManager* sceneManager, SelectionSystem* selectionSystem, TileManager* tileManager) {
         m_scene = scene;
         m_sceneManager = sceneManager;
         m_selectionSystem = selectionSystem;
+        m_tileManager = tileManager;
     }
 
     // ===========================

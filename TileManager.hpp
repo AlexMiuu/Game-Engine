@@ -144,6 +144,12 @@ namespace gps {
         int GetLoadedCount() const;
         int GetTotalCount() const { return static_cast<int>(m_tiles.size()); }
 
+        // Grid bounds (returns the world-space AABB of all loaded tiles)
+        bool GetGridBounds(glm::vec3& outMin, glm::vec3& outMax) const;
+
+        // Grid range getters
+        void GetGridRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const;
+
         // ===========================
         // CLEANUP
         // ===========================

@@ -251,6 +251,49 @@ namespace gps {
         return count;
     }
 
+    bool TileManager::GetGridBounds(glm::vec3& outMin, glm::vec3& outMax) const {
+        if (m_tiles.empty()) return false;
+
+        int minX = std::numeric_limits<int>::max();
+        int maxX = std::numeric_limits<int>::lowest();
+        int minZ = std::numeric_limits<int>::max();
+        int maxZ = std::numeric_limits<int>::lowest();
+
+        bool hasLoaded = false;
+        for (const auto& pair : m_tiles) {
+            if (!pair.second.isLoaded) continue;
+            hasLoaded = true;
+            if (pair.first.x < minX) minX = pair.first.x;
+            if (pair.first.x > maxX) maxX = pair.first.x;
+            if (pair.first.z < minZ) minZ = pair.first.z;
+            if (pair.first.z > maxZ) maxZ = pair.first.z;
+        }
+
+        if (!hasLoaded) return false;
+
+        // World-space bounds: from the left edge of minX tile to the right edge of maxX tile
+        outMin = glm::vec3(minX * m_tileSize, -1000.0f, minZ * m_tileSize);
+        outMax = glm::vec3((maxX + 1) * m_tileSize, 1000.0f, (maxZ + 1) * m_tileSize);
+        return true;
+    }
+
+    void TileManager::GetGridRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const {
+        outMinX = 0; outMaxX = 0; outMinZ = 0; outMaxZ = 0;
+        bool first = true;
+        for (const auto& pair : m_tiles) {
+            if (first) {
+                outMinX = outMaxX = pair.first.x;
+                outMinZ = outMaxZ = pair.first.z;
+                first = false;
+            } else {
+                if (pair.first.x < outMinX) outMinX = pair.first.x;
+                if (pair.first.x > outMaxX) outMaxX = pair.first.x;
+                if (pair.first.z < outMinZ) outMinZ = pair.first.z;
+                if (pair.first.z > outMaxZ) outMaxZ = pair.first.z;
+            }
+        }
+    }
+
     // ===========================
     // CLEANUP
     // ===========================

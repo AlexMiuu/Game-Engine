@@ -1,6 +1,6 @@
 //
 // SceneObject.hpp
-// Reprezintã un obiect în scenã cu componente ?i transform
+// Reprezintï¿½ un obiect ï¿½n scenï¿½ cu componente ?i transform
 //
 #ifndef SCENEOBJECT_HPP
 #define SCENEOBJECT_HPP
@@ -20,7 +20,7 @@ namespace gps {
 namespace gps {
 
     /**
-     * @brief Clasã simplã pentru transformãri (position, rotation, scale)
+     * @brief Clasï¿½ simplï¿½ pentru transformï¿½ri (position, rotation, scale)
      */
     class Transform {
     public:
@@ -40,7 +40,7 @@ namespace gps {
         void SetRotation(const glm::vec3& rot) { m_rotation = rot; }
         void SetScale(const glm::vec3& scale) { m_scale = scale; }
 
-        // Calculeazã matricea de model
+        // Calculeazï¿½ matricea de model
         glm::mat4 GetModelMatrix() const {
             glm::mat4 T = glm::translate(glm::mat4(1.0f), m_position);
             glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.x), glm::vec3(1, 0, 0));
@@ -57,7 +57,7 @@ namespace gps {
     };
 
     /**
-     * @brief Structurã pentru datele de mi?care ale unui obiect
+     * @brief Structurï¿½ pentru datele de mi?care ale unui obiect
      */
     struct MovementData {
         bool isMoving = false;
@@ -68,12 +68,12 @@ namespace gps {
     };
 
     /**
-     * @brief SceneObject - container pentru un obiect în scenã
+     * @brief SceneObject - container pentru un obiect ï¿½n scenï¿½
      *
      * Con?ine:
      * - Transform (pozi?ie, rota?ie, scale)
      * - Model 3D pentru rendering
-     * - Componente (logicã, comportament)
+     * - Componente (logicï¿½, comportament)
      * - Bounding sphere (pentru culling, collision)
      * - Date de mi?care
      */
@@ -119,6 +119,10 @@ namespace gps {
         const glm::vec3& GetWorldCenter() const { return m_worldCenter; }
         float GetWorldRadius() const { return m_worldRadius; }
 
+        float GetCollisionRadius() const { return m_collisionRadius; }
+        void SetCollisionRadius(float radius) { m_collisionRadius = radius; }
+        bool IsCollidable() const { return m_collisionRadius > 0.0f; }
+
         // Setters
         void SetActive(bool active) { m_active = active; }
         void SetModel(Model3D* model) { m_model = model; }
@@ -139,16 +143,17 @@ namespace gps {
         bool m_active;
 
         Transform m_transform;
-        Model3D* m_model; // Pointer cãtre model (nu de?inem ownership-ul)
+        Model3D* m_model; // Pointer cï¿½tre model (nu de?inem ownership-ul)
 
         // Componente
         std::vector<std::unique_ptr<Component>> m_components;
 
         // Bounding sphere
-        glm::vec3 m_localCenter;  // În local space
+        glm::vec3 m_localCenter;  // ï¿½n local space
         float m_localRadius;
-        glm::vec3 m_worldCenter;  // În world space
+        glm::vec3 m_worldCenter;  // ï¿½n world space
         float m_worldRadius;
+        float m_collisionRadius;  // 0.0f = not collidable
     };
 
 } // namespace gps

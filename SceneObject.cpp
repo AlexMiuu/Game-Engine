@@ -19,11 +19,12 @@ namespace gps {
         , m_localRadius(1.0f)
         , m_worldCenter(0.0f)
         , m_worldRadius(1.0f)
+        , m_collisionRadius(0.0f)
     {
     }
 
     SceneObject::~SceneObject() {
-        // Cleanup components (std::unique_ptr se ocupã automat)
+        // Cleanup components (std::unique_ptr se ocupï¿½ automat)
         for (auto& component : m_components) {
             if (component) {
                 component->OnDestroy();
@@ -41,17 +42,17 @@ namespace gps {
             }
         }
 
-        // Update world bounds (în caz cã transform-ul s-a schimbat)
+        // Update world bounds (ï¿½n caz cï¿½ transform-ul s-a schimbat)
         UpdateWorldBounds();
     }
 
     void SceneObject::UpdateWorldBounds() {
-        // Transformã centrul local în world space
+        // Transformï¿½ centrul local ï¿½n world space
         const glm::mat4& modelMatrix = m_transform.GetModelMatrix();
         glm::vec4 worldCenterVec4 = modelMatrix * glm::vec4(m_localCenter, 1.0f);
         m_worldCenter = glm::vec3(worldCenterVec4);
 
-        // Calculeazã scale factor (pentru radius)
+        // Calculeazï¿½ scale factor (pentru radius)
         // Folosim scale-ul maxim din cele 3 axe
         glm::vec3 scaleVec = m_transform.GetScale();
         float maxScale = std::max(scaleVec.x, std::max(scaleVec.y, scaleVec.z));

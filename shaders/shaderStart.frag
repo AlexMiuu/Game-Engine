@@ -113,7 +113,7 @@ void main() {
     vec3 lighting =  (ambDir + (1.0 - shadowAmount ) * (diffDir + specDir))+ (ambientP + (1.0 - shadowAmount) * (diffuseP + specularP));
 
     fColor = vec4(clamp(lighting, 0.0, 1.0), 1.0);
-if (isSelected && (objectID == 2 || objectID >= 100)) {
+if (isSelected) {
     fColor = mix(fColor, vec4(highlightColor, 1.0), 0.3); // 30% highlight
 }
 }
