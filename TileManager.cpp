@@ -17,6 +17,7 @@ namespace gps {
         : m_terrainModel(nullptr)
         , m_scene(nullptr)
         , m_tileSize(tileSize)
+        , m_tileModelScale(1.0f)
     {
     }
 
@@ -235,6 +236,29 @@ namespace gps {
         return result;
     }
 
+    void TileManager::SetTileModelScale(const glm::vec3& scale) {
+        m_tileModelScale = scale;
+
+        if (!m_scene) {
+            return;
+        }
+
+        for (auto& pair : m_tiles) {
+            Tile& tile = pair.second;
+            if (!tile.isLoaded || tile.sceneObjectId < 0) {
+                continue;
+            }
+
+            SceneObject* obj = m_scene->GetObjectByID(tile.sceneObjectId);
+            if (!obj) {
+                continue;
+            }
+
+            obj->GetTransform().SetScale(m_tileModelScale);
+            obj->UpdateWorldBounds();
+        }
+    }
+
     std::vector<Tile*> TileManager::GetAllTiles() {
         std::vector<Tile*> result;
         for (auto& pair : m_tiles) {
@@ -359,7 +383,7 @@ namespace gps {
 
         // Seteaza transform
         obj->GetTransform().SetPosition(tile.worldPos);
-        obj->GetTransform().SetScale(glm::vec3(1.0f));
+        obj->GetTransform().SetScale(m_tileModelScale);
 
         // Calculeaza bounding sphere
         glm::vec3 center;

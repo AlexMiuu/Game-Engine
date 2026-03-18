@@ -138,6 +138,8 @@ namespace gps {
         // Getters
         float GetTileSize() const { return m_tileSize; }
         void SetTileSize(float size) { m_tileSize = size; }
+        const glm::vec3& GetTileModelScale() const { return m_tileModelScale; }
+        void SetTileModelScale(const glm::vec3& scale);
 
         std::vector<Tile*> GetLoadedTiles();
         std::vector<Tile*> GetAllTiles();
@@ -187,6 +189,7 @@ namespace gps {
         Model3D* m_terrainModel;
         Scene* m_scene;          // ← NOU: referinta la scena
         float m_tileSize;
+        glm::vec3 m_tileModelScale;
 
         /**
          * @brief Creeaza un SceneObject pentru un tile si il adauga in scena

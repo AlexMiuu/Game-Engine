@@ -5,6 +5,7 @@
 
 #include <iostream>
 #include <cmath>
+#include <string>
 
 // OpenGL/GLFW/GLEW
 #if defined (__APPLE__)
@@ -113,6 +114,9 @@ gps::Model3D dragon;           // Dragon
 gps::Model3D leftWingModel;    // Aripi
 gps::Model3D rightWingModel;
 gps::Model3D Pikeman;
+gps::Model3D waterTyle;
+glm::vec3 g_waterTileScale = glm::vec3(10.0f);
+
 
 // ===========================
 // SKYBOX
@@ -141,6 +145,31 @@ gps::SelectionSystem* g_selectionSystem = nullptr;
 gps::CollisionSystem* g_collisionSystem = nullptr;
 
 gps::GuiManager* g_guiManager = nullptr;
+
+// ===========================
+// PROP PLACEMENT MODE (MVP)
+// ===========================
+bool g_propPlacementMode = false;
+std::string g_propModelToPlace = "orc";
+glm::vec3 g_propScaleToPlace = glm::vec3(0.5f);
+std::string g_propLabelToPlace = "Orc";
+int g_nextPlacedPropID = 10001;
+
+void ArmPropPlacement(const std::string& modelName, const glm::vec3& scale, const std::string& label) {
+    g_propPlacementMode = true;
+    g_propModelToPlace = modelName;
+    g_propScaleToPlace = scale;
+    g_propLabelToPlace = label;
+
+    std::cout << "🧱 Placement armed for " << g_propLabelToPlace
+        << ". Left click on terrain to place. Right click to cancel." << std::endl;
+}
+
+void CancelPropPlacement() {
+    if (!g_propPlacementMode) return;
+    g_propPlacementMode = false;
+    std::cout << "❌ Placement cancelled" << std::endl;
+}
 
 // ===========================
 // TIME
@@ -236,6 +265,37 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
     glm::vec2 mousePos = gps::InputManager::Instance().GetMousePosition();
 
+    // Placement mode: left click places selected prop and skips selection box logic.
+    if (g_propPlacementMode && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        if (g_sceneManager) {
+            glm::vec3 worldPos = screenToWorld(mousePos);
+
+            glm::vec3 gridMin, gridMax;
+            if (g_tileManager.GetGridBounds(gridMin, gridMax)) {
+                worldPos.x = glm::clamp(worldPos.x, gridMin.x, gridMax.x);
+                worldPos.z = glm::clamp(worldPos.z, gridMin.z, gridMax.z);
+            }
+
+            std::string objectName = "Prop_" + g_propLabelToPlace + "_" + std::to_string(g_nextPlacedPropID++);
+            gps::SceneObject* spawned = g_sceneManager->SpawnObject(
+                objectName,
+                g_propModelToPlace,
+                worldPos,
+                g_propScaleToPlace
+            );
+
+            if (spawned) {
+                std::cout << "✅ Placed " << g_propLabelToPlace << " at ("
+                    << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
+            }
+            else {
+                std::cout << "❌ Failed to place " << g_propLabelToPlace
+                    << " (model not registered or invalid state)" << std::endl;
+            }
+        }
+        return;
+    }
+
     // LEFT MOUSE - Selection
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
@@ -247,6 +307,12 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
             g_selectionSystem->EndBoxSelection(*g_scene, myCamera, projection, shiftHeld);
         }
+    }
+
+    // RIGHT MOUSE - Cancel placement mode
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS && g_propPlacementMode) {
+        CancelPropPlacement();
+        return;
     }
 
     // RIGHT MOUSE - Movement Command
@@ -342,6 +408,16 @@ void initGui() {
         };
     g_guiManager->AddButton(dragonBtn);
 
+    // Buttons: arm click-to-place prop mode
+    gps::GuiButton placeDragonBtn;
+    placeDragonBtn.label = "🧱 Place Dragon";
+    placeDragonBtn.tooltip = "Armeaza plasarea dragonului. Click stanga pe harta pentru spawn.";
+    placeDragonBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
+    placeDragonBtn.callback = [&]() {
+        ArmPropPlacement("orc", glm::vec3(0.5f), "Orc");
+        };
+    g_guiManager->AddButton(placeDragonBtn);
+
     // Buton: Toggle Spawn
     gps::GuiButton toggleSpawnBtn;
     toggleSpawnBtn.label = "🔄 Toggle Spawn";
@@ -354,6 +430,8 @@ void initGui() {
     g_guiManager->AddButton(toggleSpawnBtn);
 
     std::cout << "✅ GUI initialized" << std::endl;
+
+
 }
 
 // ===========================
@@ -446,6 +524,7 @@ void initModels() {
     dragon.LoadModel("objects/dragon/dragon.obj", "textures/");
     leftWingModel.LoadModel("objects/LEFTWING/LEFTWING.obj", "textures/");
     rightWingModel.LoadModel("objects/RIGHTWING/RIGHTWING.obj", "textures/");
+    waterTyle.LoadModel("objects/water/water.obj","textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -543,8 +622,10 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("leftWing", &leftWingModel);
     g_sceneManager->RegisterModel("rightWing", &rightWingModel);
 	g_sceneManager->RegisterModel("pikeman", &Pikeman);
+    g_sceneManager->RegisterModel("water",&waterTyle);
 
-    g_tileManager.Initialize(&sceneModel, g_scene);
+    g_tileManager.Initialize(&waterTyle, g_scene);
+    g_tileManager.SetTileModelScale(g_waterTileScale);
     // Generate initial 3x3 tile grid centered at origin
     g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
 
@@ -632,6 +713,11 @@ void processMovement() {
     // Clear selection
     if (input.IsKeyJustPressed(GLFW_KEY_C)) {
         g_selectionSystem->ClearSelection();
+    }
+
+    // Quick cancel for placement mode without exiting app
+    if (input.IsKeyJustPressed(GLFW_KEY_X)) {
+        CancelPropPlacement();
     }
 }
 
@@ -782,6 +868,8 @@ int main(int argc, const char* argv[]) {
     std::cout << "  C - Clear selection" << std::endl;
     std::cout << "  Left Mouse - Box selection (hold SHIFT to add)" << std::endl;
     std::cout << "  Right Mouse - Move selected troops" << std::endl;
+    std::cout << "  Place mode: use GUI 'Place ...' button, then Left Mouse to place" << std::endl;
+    std::cout << "  Right Mouse or X - Cancel place mode" << std::endl;
     std::cout << "  Scroll - Zoom" << std::endl;
     std::cout << "  ESC - Exit\n" << std::endl;
 

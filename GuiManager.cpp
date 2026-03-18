@@ -27,6 +27,8 @@ namespace gps {
         , m_deltaTime(0.016f)
         , m_zoomFactor(1.0f)
         , m_fpsHistoryIdx(0)
+        , m_tileSize(300)
+        , m_tileModelScale(1.0f)
     {
         memset(m_fpsHistory, 0, sizeof(m_fpsHistory));
     }
@@ -291,6 +293,31 @@ namespace gps {
             if (ImGui::Button("Remove Tile", ImVec2(btnWidth, 28))) {
                 m_tileManager->UnloadTile(tileX, tileZ);
             }
+
+            ImGui::Spacing();
+            ImGui::SeparatorText("Resize");
+            ImGui::SliderInt("Grid Tile Size", &m_tileSize, 10, 1000);
+            ImGui::SliderFloat("Tile Model Scale", &m_tileModelScale, 0.10f, 255.00f, "%.2f");
+
+            if (ImGui::Button("Apply Resize", ImVec2(btnWidth, 28)))
+            {
+                bool hadTiles = (m_tileManager->GetTotalCount() > 0);
+                int minX = 0, maxX = 0, minZ = 0, maxZ = 0;
+
+                if (hadTiles) {
+                    m_tileManager->GetGridRange(minX, maxX, minZ, maxZ);
+                }
+
+                // Update size and scale. Grid spacing changes require rebuilding loaded tiles.
+                m_tileManager->SetTileSize(static_cast<float>(m_tileSize));
+                m_tileManager->SetTileModelScale(glm::vec3(m_tileModelScale));
+
+                if (hadTiles) {
+                    m_tileManager->Clear();
+                    m_tileManager->GenerateAndLoadGrid(minX, maxX, minZ, maxZ);
+                }
+            }
+
         }
 
         // ─── CUSTOM BUTTONS ───
@@ -547,6 +574,11 @@ namespace gps {
         m_sceneManager = sceneManager;
         m_selectionSystem = selectionSystem;
         m_tileManager = tileManager;
+
+        if (m_tileManager) {
+            m_tileSize = static_cast<int>(m_tileManager->GetTileSize());
+            m_tileModelScale = m_tileManager->GetTileModelScale().x;
+        }
     }
 
     // ===========================
