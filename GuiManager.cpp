@@ -29,6 +29,7 @@ namespace gps {
         , m_fpsHistoryIdx(0)
         , m_tileSize(300)
         , m_tileModelScale(1.0f)
+        , heightTile(2.0f)
     {
         memset(m_fpsHistory, 0, sizeof(m_fpsHistory));
     }
@@ -298,6 +299,7 @@ namespace gps {
             ImGui::SeparatorText("Resize");
             ImGui::SliderInt("Grid Tile Size", &m_tileSize, 10, 1000);
             ImGui::SliderFloat("Tile Model Scale", &m_tileModelScale, 0.10f, 255.00f, "%.2f");
+            ImGui::InputInt("TILEHEIGHT", &heightTile);
 
             if (ImGui::Button("Apply Resize", ImVec2(btnWidth, 28)))
             {
@@ -316,6 +318,9 @@ namespace gps {
                     m_tileManager->Clear();
                     m_tileManager->GenerateAndLoadGrid(minX, maxX, minZ, maxZ);
                 }
+
+                m_tileManager->SetTileHeight(heightTile);
+
             }
 
         }

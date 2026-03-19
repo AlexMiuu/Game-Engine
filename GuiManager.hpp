@@ -124,6 +124,8 @@ namespace gps {
 
         int m_tileSize;
         float m_tileModelScale;
+
+        int heightTile;
     };
 
 } // namespace gps

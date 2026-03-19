@@ -39,7 +39,7 @@ namespace gps {
         void SetPosition(const glm::vec3& pos) { m_position = pos; }
         void SetRotation(const glm::vec3& rot) { m_rotation = rot; }
         void SetScale(const glm::vec3& scale) { m_scale = scale; }
-
+		void SetHeight(float height) { m_position.y = height; }
         // Calculeaz� matricea de model
         glm::mat4 GetModelMatrix() const {
             glm::mat4 T = glm::translate(glm::mat4(1.0f), m_position);

@@ -259,6 +259,24 @@ namespace gps {
         }
     }
 
+    void TileManager::SetTileHeight(int height) {
+
+        for (auto& pair : m_tiles) {
+            Tile& tile = pair.second;
+            if (!tile.isLoaded || tile.sceneObjectId < 0) {
+                continue;
+            }
+
+            SceneObject* obj = m_scene->GetObjectByID(tile.sceneObjectId);
+            if (!obj) {
+                continue;
+            }
+
+            obj->GetTransform().SetHeight(height);
+            obj->UpdateWorldBounds();
+        }
+
+    }
     std::vector<Tile*> TileManager::GetAllTiles() {
         std::vector<Tile*> result;
         for (auto& pair : m_tiles) {
