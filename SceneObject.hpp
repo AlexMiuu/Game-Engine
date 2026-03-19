@@ -63,6 +63,7 @@ namespace gps {
         bool isMoving = false;
         glm::vec3 moveStartPos = glm::vec3(0.0f);
         glm::vec3 moveEndPos = glm::vec3(0.0f);
+        glm::vec3 moveDirection = glm::vec3(0.0f, 0.0f, -1.0f);
         float moveStartTime = 0.0f;
         float moveDuration = 1.0f;
     };

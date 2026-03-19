@@ -110,12 +110,11 @@ GLint viewPosEyeLoc;
 gps::Model3D sceneModel;      // Teren
 gps::Model3D obiecte;          // Obiecte statice
 gps::Model3D orcModel;         // Trupe
-gps::Model3D dragon;           // Dragon
-gps::Model3D leftWingModel;    // Aripi
 gps::Model3D rightWingModel;
 gps::Model3D Pikeman;
 gps::Model3D waterTyle;
 glm::vec3 g_waterTileScale = glm::vec3(10.0f);
+gps::Model3D shipModel;
 
 
 // ===========================
@@ -150,9 +149,9 @@ gps::GuiManager* g_guiManager = nullptr;
 // PROP PLACEMENT MODE (MVP)
 // ===========================
 bool g_propPlacementMode = false;
-std::string g_propModelToPlace = "orc";
-glm::vec3 g_propScaleToPlace = glm::vec3(0.5f);
-std::string g_propLabelToPlace = "Orc";
+std::string g_propModelToPlace = "ship";
+glm::vec3 g_propScaleToPlace = glm::vec3(2.5f);
+std::string g_propLabelToPlace = "Ship";
 int g_nextPlacedPropID = 10001;
 
 void ArmPropPlacement(const std::string& modelName, const glm::vec3& scale, const std::string& label) {
@@ -350,9 +349,17 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             }
 
             // Setează movement
+            glm::vec3 startPos = obj->GetTransform().GetPosition();
+            glm::vec3 moveDir = formationPos - startPos;
+            moveDir.y = 0.0f;
+
+            if (glm::length(moveDir) > 0.0001f) {
+                moveDir = glm::normalize(moveDir);
+                obj->movement.moveDirection = moveDir;
+            }
 
             obj->movement.isMoving = true;
-            obj->movement.moveStartPos = obj->GetTransform().GetPosition();
+            obj->movement.moveStartPos = startPos;
             obj->movement.moveEndPos = formationPos;
             obj->movement.moveStartTime = glfwGetTime();
             obj->movement.moveDuration = 2.0f;
@@ -414,7 +421,7 @@ void initGui() {
     placeDragonBtn.tooltip = "Armeaza plasarea dragonului. Click stanga pe harta pentru spawn.";
     placeDragonBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
     placeDragonBtn.callback = [&]() {
-        ArmPropPlacement("orc", glm::vec3(0.5f), "Orc");
+        ArmPropPlacement("ship", glm::vec3(2.5f), "Ship");
         };
     g_guiManager->AddButton(placeDragonBtn);
 
@@ -521,10 +528,9 @@ void initModels() {
     obiecte.LoadModel("objects/restobiecte/restobiecte.obj", "textures/");
     orcModel.LoadModel("objects/ORC/ORC.obj", "textures/");
 	Pikeman.LoadModel("objects/ORC/pikeman.obj", "textures/");
-    dragon.LoadModel("objects/dragon/dragon.obj", "textures/");
-    leftWingModel.LoadModel("objects/LEFTWING/LEFTWING.obj", "textures/");
     rightWingModel.LoadModel("objects/RIGHTWING/RIGHTWING.obj", "textures/");
     waterTyle.LoadModel("objects/water/water.obj","textures/");
+    shipModel.LoadModel("objects/ships/Battleship.obj","textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -554,7 +560,7 @@ void initUniforms() {
     highlightColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "highlightColor");  
     objectIDLoc = glGetUniformLocation(myCustomShader.shaderProgram, "objectID");
 
-    // Set light direction
+// Set light direction
   //  glUniform3fv(lightDirLoc, 1, glm::value_ptr(lightDir));
 
     // Set view
@@ -618,11 +624,9 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("terrain", &sceneModel);
     g_sceneManager->RegisterModel("objects", &obiecte);
     g_sceneManager->RegisterModel("orc", &orcModel);
-    g_sceneManager->RegisterModel("dragon", &dragon);
-    g_sceneManager->RegisterModel("leftWing", &leftWingModel);
-    g_sceneManager->RegisterModel("rightWing", &rightWingModel);
 	g_sceneManager->RegisterModel("pikeman", &Pikeman);
     g_sceneManager->RegisterModel("water",&waterTyle);
+    g_sceneManager->RegisterModel("ship",&shipModel);
 
     g_tileManager.Initialize(&waterTyle, g_scene);
     g_tileManager.SetTileModelScale(g_waterTileScale);
@@ -916,6 +920,13 @@ int main(int argc, const char* argv[]) {
                 }
 
                 obj->GetTransform().SetPosition(newPos);
+
+                if (glm::length(obj->movement.moveDirection) > 0.0001f) {
+                    float yaw = glm::degrees(std::atan2(obj->movement.moveDirection.x, -obj->movement.moveDirection.z));
+                    glm::vec3 currentRot = obj->GetTransform().GetRotation();
+                    obj->GetTransform().SetRotation(glm::vec3(currentRot.x, -yaw, currentRot.z));
+                }
+
                 obj->UpdateWorldBounds();
 
                 // Collision check: revert and stop if colliding
