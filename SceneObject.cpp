@@ -12,6 +12,7 @@ namespace gps {
 
     SceneObject::SceneObject(int id, const std::string& name)
         : m_id(id)
+		, m_tag("default")
         , m_name(name)
         , m_active(true)
         , m_model(nullptr)

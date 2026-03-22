@@ -42,6 +42,8 @@
 #include "CollisionSystem.hpp"        // Collision detection
 
 #include "GuiManager.hpp"
+#include "CombatSystem.hpp"
+#include "ResourceManager.hpp"
 
 // ===========================
 // WINDOW SETTINGS
@@ -115,6 +117,7 @@ gps::Model3D Pikeman;
 gps::Model3D waterTyle;
 glm::vec3 g_waterTileScale = glm::vec3(10.0f);
 gps::Model3D shipModel;
+gps::Model3D oilRigModel;
 
 
 // ===========================
@@ -142,6 +145,7 @@ gps::Scene* g_scene = nullptr;
 gps::SceneManager* g_sceneManager = nullptr;
 gps::SelectionSystem* g_selectionSystem = nullptr;
 gps::CollisionSystem* g_collisionSystem = nullptr;
+gps::CombatSystem*   g_combatSystem    = nullptr;
 
 gps::GuiManager* g_guiManager = nullptr;
 
@@ -152,13 +156,15 @@ bool g_propPlacementMode = false;
 std::string g_propModelToPlace = "ship";
 glm::vec3 g_propScaleToPlace = glm::vec3(2.5f);
 std::string g_propLabelToPlace = "Ship";
+std::string g_propTagToPlace = "ship";
 int g_nextPlacedPropID = 10001;
 
-void ArmPropPlacement(const std::string& modelName, const glm::vec3& scale, const std::string& label) {
+void ArmPropPlacement(const std::string& modelName,const std::string& tag, const glm::vec3& scale, const std::string& label) {
     g_propPlacementMode = true;
     g_propModelToPlace = modelName;
     g_propScaleToPlace = scale;
     g_propLabelToPlace = label;
+	g_propTagToPlace = tag;
 
     std::cout << "🧱 Placement armed for " << g_propLabelToPlace
         << ". Left click on terrain to place. Right click to cancel." << std::endl;
@@ -202,6 +208,7 @@ void initTileManager();
 void initSceneManager();
 void initSelectionSystem();
 void initCollisionSystem();
+void initCombatSystem();
 
 void initGui();
 void processMovement();
@@ -278,6 +285,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             std::string objectName = "Prop_" + g_propLabelToPlace + "_" + std::to_string(g_nextPlacedPropID++);
             gps::SceneObject* spawned = g_sceneManager->SpawnObject(
                 objectName,
+				g_propTagToPlace,
                 g_propModelToPlace,
                 worldPos,
                 g_propScaleToPlace
@@ -410,20 +418,30 @@ void initGui() {
     dragonBtn.tooltip = "Spawneaza un dragon la pozitia default";
     dragonBtn.color = glm::vec4(0.6f, 0.2f, 0.2f, 1.0f);
     dragonBtn.callback = [&]() {
-        g_sceneManager->SpawnObject("Dragon", "dragon",
+        g_sceneManager->SpawnObject("Dragon", "dragon","dragon",
             glm::vec3(50.0f, -60.0f, -50.0f), glm::vec3(0.5f));
         };
     g_guiManager->AddButton(dragonBtn);
 
     // Buttons: arm click-to-place prop mode
-    gps::GuiButton placeDragonBtn;
-    placeDragonBtn.label = "🧱 Place Dragon";
-    placeDragonBtn.tooltip = "Armeaza plasarea dragonului. Click stanga pe harta pentru spawn.";
-    placeDragonBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
-    placeDragonBtn.callback = [&]() {
-        ArmPropPlacement("ship", glm::vec3(2.5f), "Ship");
+    gps::GuiButton placeShipBtn;
+    placeShipBtn.label = "Spawn Ship";
+    placeShipBtn.tooltip = "Pune o nava pe harta, click stanga pe harta pentru spawn.";
+    placeShipBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
+    placeShipBtn.callback = [&]() {
+        ArmPropPlacement("ship","ship", glm::vec3(2.5f), "Ship");
         };
-    g_guiManager->AddButton(placeDragonBtn);
+    g_guiManager->AddButton(placeShipBtn);
+
+
+    gps::GuiButton placeOilRigBtn;
+    placeOilRigBtn.label = "Spawn Oil Rig";
+    placeOilRigBtn.tooltip = "Pune un rig de ulei pe harta, click stanga pe harta pentru spawn.";
+    placeOilRigBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
+    placeOilRigBtn.callback = [&]() {
+        ArmPropPlacement("oilRig","oilRig", glm::vec3(2.5f), "Oil Rig");
+        };
+    g_guiManager->AddButton(placeOilRigBtn);
 
     // Buton: Toggle Spawn
     gps::GuiButton toggleSpawnBtn;
@@ -531,6 +549,7 @@ void initModels() {
     rightWingModel.LoadModel("objects/RIGHTWING/RIGHTWING.obj", "textures/");
     waterTyle.LoadModel("objects/water/water.obj","textures/");
     shipModel.LoadModel("objects/ships/Battleship.obj","textures/");
+    oilRigModel.LoadModel("objects/oilRig/oilRig.obj", "textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -627,6 +646,7 @@ void initSceneManager() {
 	g_sceneManager->RegisterModel("pikeman", &Pikeman);
     g_sceneManager->RegisterModel("water",&waterTyle);
     g_sceneManager->RegisterModel("ship",&shipModel);
+    g_sceneManager->RegisterModel("oilRig", &oilRigModel);
 
     g_tileManager.Initialize(&waterTyle, g_scene);
     g_tileManager.SetTileModelScale(g_waterTileScale);
@@ -656,6 +676,16 @@ void initCollisionSystem() {
     g_collisionSystem = new gps::CollisionSystem();
     g_collisionSystem->Initialize(g_scene);
     std::cout << "✅ CollisionSystem initialized" << std::endl;
+}
+
+void initCombatSystem() {
+    g_combatSystem = new gps::CombatSystem();
+    g_combatSystem->Initialize(g_scene);
+
+    // Starting resources
+    gps::ResourceManager::Instance().Set("Oil",  50.0f);
+
+    std::cout << " CombatSystem initialized" << std::endl;
 }
 
 
@@ -861,6 +891,7 @@ int main(int argc, const char* argv[]) {
     initSceneManager();
     initSelectionSystem();
     initCollisionSystem();
+    initCombatSystem();
     initGui();
 
     std::cout << "✅ Initialization complete!" << std::endl;
@@ -890,6 +921,27 @@ int main(int argc, const char* argv[]) {
         // Update scene
         if (g_scene) {
             g_scene->Update(deltaTime);
+        }
+
+        // Resource production
+        if (g_scene) {
+            for (auto* obj : g_scene->GetObjectsRaw()) {
+                if (!obj->IsActive()) continue;
+                const gps::UnitStats& s = obj->unitStats;
+                if (s.productionRate > 0.0f && !s.resourceType.empty() && s.resourceType != "none") {
+                    gps::ResourceManager::Instance().Deposit(s.resourceType, s.productionRate * deltaTime);
+                }
+            }
+        }
+
+        // Combat update
+        if (g_combatSystem) {
+            g_combatSystem->Update(deltaTime);
+            for (int deadID : g_combatSystem->GetDeadIDs()) {
+                if (g_selectionSystem) g_selectionSystem->RemoveFromSelection(deadID);
+                if (g_scene) g_scene->DestroyObject(deadID);
+            }
+            g_combatSystem->ClearDeadIDs();
         }
 
         // Update troops movement
@@ -1023,6 +1075,7 @@ int main(int argc, const char* argv[]) {
     delete g_sceneManager;
     delete g_selectionSystem;
     delete g_collisionSystem;
+    delete g_combatSystem;
 
     glfwDestroyWindow(glWindow);
     glfwTerminate();

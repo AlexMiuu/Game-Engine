@@ -1,6 +1,6 @@
 //
 // SceneManager.hpp
-// Manager pentru ini?ializarea ?i spawn-ul obiectelor în scenã
+// Manager pentru ini?ializarea ?i spawn-ul obiectelor ï¿½n scenï¿½
 //
 
 #ifndef SCENE_MANAGER_HPP
@@ -18,13 +18,13 @@
 namespace gps {
 
     /**
-     * @brief Manager pentru crearea ?i gestionarea obiectelor în scenã
+     * @brief Manager pentru crearea ?i gestionarea obiectelor ï¿½n scenï¿½
      *
-     * Responsabilitã?i:
-     * - Ini?ializeazã scena cu toate obiectele (teren, clãdiri, unitã?i)
-     * - Spawn-uie?te unitã?i noi în timpul jocului
-     * - Gestioneazã ID-urile obiectelor
-     * - Configureazã properties ale obiectelor (bounding spheres, etc)
+     * Responsabilitï¿½?i:
+     * - Ini?ializeazï¿½ scena cu toate obiectele (teren, clï¿½diri, unitï¿½?i)
+     * - Spawn-uie?te unitï¿½?i noi ï¿½n timpul jocului
+     * - Gestioneazï¿½ ID-urile obiectelor
+     * - Configureazï¿½ properties ale obiectelor (bounding spheres, etc)
      *
      * Exemplu de utilizare:
      * @code
@@ -33,7 +33,7 @@ namespace gps {
      * sceneManager.LoadModels();
      * sceneManager.SetupScene();
      *
-     * // Spawn unitã?i în timpul jocului
+     * // Spawn unitï¿½?i ï¿½n timpul jocului
      * SceneObject* troop = sceneManager.SpawnTroop(glm::vec3(100, -60, -90));
      * @endcode
      */
@@ -47,21 +47,21 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Ini?ializeazã scene manager-ul cu scene ?i tile manager
-         * @param scene Pointer la scenã (va fi gestionatã de SceneManager)
+         * @brief Ini?ializeazï¿½ scene manager-ul cu scene ?i tile manager
+         * @param scene Pointer la scenï¿½ (va fi gestionatï¿½ de SceneManager)
          * @param tileManager Pointer la tile manager (pentru teren)
          */
         void Initialize(Scene* scene, TileManager* tileManager = nullptr);
 
         /**
-         * @brief Încarcã toate modelele necesare
-         * Aceastã metodã trebuie apelatã DUPÃ ini?ializarea OpenGL
+         * @brief ï¿½ncarcï¿½ toate modelele necesare
+         * Aceastï¿½ metodï¿½ trebuie apelatï¿½ DUPï¿½ ini?ializarea OpenGL
          */
         void LoadModels();
 
         /**
-         * @brief Configureazã scena ini?ialã cu toate obiectele
-         * Creeazã terenul, obiectele statice, unitã?i ini?iale, etc.
+         * @brief Configureazï¿½ scena ini?ialï¿½ cu toate obiectele
+         * Creeazï¿½ terenul, obiectele statice, unitï¿½?i ini?iale, etc.
          */
         void SetupScene();
 
@@ -70,18 +70,18 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Spawnezã o trupã la pozi?ia specificatã
-         * @param position Pozi?ia în world space
+         * @brief Spawnezï¿½ o trupï¿½ la pozi?ia specificatï¿½
+         * @param position Pozi?ia ï¿½n world space
          * @param modelName Numele modelului (default: "orc")
-         * @return Pointer la obiectul creat sau nullptr dacã a e?uat
+         * @return Pointer la obiectul creat sau nullptr dacï¿½ a e?uat
          */
         SceneObject* SpawnTroop(const glm::vec3& position, const std::string& modelName = "orc");
 
         /**
-         * @brief Spawnezã mai multe trupe într-o forma?ie
+         * @brief Spawnezï¿½ mai multe trupe ï¿½ntr-o forma?ie
          * @param centerPosition Centrul forma?iei
-         * @param count Numãrul de trupe
-         * @param spacing Spa?iul între trupe
+         * @param count Numï¿½rul de trupe
+         * @param spacing Spa?iul ï¿½ntre trupe
          * @param modelName Numele modelului
          * @return Vector cu pointeri la trupele create
          */
@@ -93,7 +93,7 @@ namespace gps {
         );
 
         /**
-         * @brief Spawnezã un obiect generic
+         * @brief Spawnezï¿½ un obiect generic
          * @param name Numele obiectului
          * @param modelName Numele modelului
          * @param position Pozi?ia
@@ -102,6 +102,7 @@ namespace gps {
          */
         SceneObject* SpawnObject(
             const std::string& name,
+            const std::string& tag,
             const std::string& modelName,
             const glm::vec3& position,
             const glm::vec3& scale = glm::vec3(1.0f)
@@ -112,23 +113,23 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Creeazã terenul principal
+         * @brief Creeazï¿½ terenul principal
          */
         void CreateTerrain();
 
         /**
-         * @brief Creeazã obiectele statice (ziduri, decora?iuni)
+         * @brief Creeazï¿½ obiectele statice (ziduri, decora?iuni)
          */
         void CreateStaticObjects();
 
         /**
-         * @brief Creeazã unitã?ile ini?iale
-         * @param count Numãrul de unitã?i de creat
+         * @brief Creeazï¿½ unitï¿½?ile ini?iale
+         * @param count Numï¿½rul de unitï¿½?i de creat
          */
         void CreateInitialTroops(int count = 5);
 
         /**
-         * @brief Creeazã obiectele animate (dragoni, etc)
+         * @brief Creeazï¿½ obiectele animate (dragoni, etc)
          */
         void CreateAnimatedObjects();
 
@@ -137,15 +138,15 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Înregistreazã un model pentru folosire ulterioarã
-         * @param name Numele modelului (pentru referin?ã)
+         * @brief ï¿½nregistreazï¿½ un model pentru folosire ulterioarï¿½
+         * @param name Numele modelului (pentru referin?ï¿½)
          * @param model Pointer la model
          */
         void RegisterModel(const std::string& name, Model3D* model);
 
         /**
-         * @brief Ob?ine un model dupã nume
-         * @return Pointer la model sau nullptr dacã nu existã
+         * @brief Ob?ine un model dupï¿½ nume
+         * @return Pointer la model sau nullptr dacï¿½ nu existï¿½
          */
         Model3D* GetModel(const std::string& name);
 
@@ -154,22 +155,22 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Ob?ine scena gestionatã
+         * @brief Ob?ine scena gestionatï¿½
          */
         Scene* GetScene() { return m_scene; }
 
         /**
-         * @brief Ob?ine urmãtorul ID disponibil pentru trupe
+         * @brief Ob?ine urmï¿½torul ID disponibil pentru trupe
          */
         int GetNextTroopID() { return m_nextTroopID++; }
 
         /**
-         * @brief Ob?ine numãrul total de trupe spawneate
+         * @brief Ob?ine numï¿½rul total de trupe spawneate
          */
         int GetTroopCount() const { return m_troopCount; }
 
         /**
-         * @brief Verificã dacã spawn-ul e activat
+         * @brief Verificï¿½ dacï¿½ spawn-ul e activat
          */
         bool IsSpawnEnabled() const { return m_spawnEnabled; }
         void SetSpawnEnabled(bool enabled) { m_spawnEnabled = enabled; }
@@ -179,7 +180,7 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Seteazã pozi?ia de spawn pentru trupe
+         * @brief Seteazï¿½ pozi?ia de spawn pentru trupe
          */
         void SetTroopSpawnPosition(const glm::vec3& pos) { m_troopSpawnPos = pos; }
 
@@ -193,11 +194,17 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Calculeazã ?i seteazã bounding sphere pentru un obiect
-         * @param obj Obiectul pentru care se calculeazã
+         * @brief Calculeazï¿½ ?i seteazï¿½ bounding sphere pentru un obiect
+         * @param obj Obiectul pentru care se calculeazï¿½
          * @param model Modelul 3D al obiectului
          */
         void ComputeAndSetBoundingSphere(SceneObject* obj, Model3D* model);
+
+        /**
+         * @brief Initializes unit stats based on the object's name tag
+         * Call this after spawning any object.
+         */
+        UnitStats InitializeUnitsStats(SceneObject* object);
 
     private:
         // Scene reference

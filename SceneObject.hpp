@@ -9,7 +9,7 @@
 #include <vector>
 #include <memory>
 #include <glm/glm.hpp>
-#include <glm/gtc/matrix_transform.hpp>
+#include "Transform.hpp"
 
 // Forward declarations
 namespace gps {
@@ -18,43 +18,6 @@ namespace gps {
 }
 
 namespace gps {
-
-    /**
-     * @brief Clas� simpl� pentru transform�ri (position, rotation, scale)
-     */
-    class Transform {
-    public:
-        Transform()
-            : m_position(0.0f)
-            , m_rotation(0.0f)
-            , m_scale(1.0f)
-        {}
-
-        // Getters
-        const glm::vec3& GetPosition() const { return m_position; }
-        const glm::vec3& GetRotation() const { return m_rotation; }
-        const glm::vec3& GetScale() const { return m_scale; }
-
-        // Setters
-        void SetPosition(const glm::vec3& pos) { m_position = pos; }
-        void SetRotation(const glm::vec3& rot) { m_rotation = rot; }
-        void SetScale(const glm::vec3& scale) { m_scale = scale; }
-		void SetHeight(float height) { m_position.y = height; }
-        // Calculeaz� matricea de model
-        glm::mat4 GetModelMatrix() const {
-            glm::mat4 T = glm::translate(glm::mat4(1.0f), m_position);
-            glm::mat4 Rx = glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.x), glm::vec3(1, 0, 0));
-            glm::mat4 Ry = glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.y), glm::vec3(0, 1, 0));
-            glm::mat4 Rz = glm::rotate(glm::mat4(1.0f), glm::radians(m_rotation.z), glm::vec3(0, 0, 1));
-            glm::mat4 S = glm::scale(glm::mat4(1.0f), m_scale);
-            return T * Ry * Rx * Rz * S;
-        }
-
-    private:
-        glm::vec3 m_position;
-        glm::vec3 m_rotation; // Euler angles in degrees
-        glm::vec3 m_scale;
-    };
 
     /**
      * @brief Structur� pentru datele de mi?care ale unui obiect
@@ -68,6 +31,23 @@ namespace gps {
         float moveDuration = 1.0f;
     };
 
+
+    struct UnitStats {
+        int maxHealth = 100;
+        int health = 100;
+        int attack = 10;
+        int attackRange = 5;
+        bool isCombatUnit = false;
+        bool isAlive = true;
+
+        // Runtime combat state (managed by CombatSystem)
+        float attackCooldown = 0.0f;
+        int   targetID = -1;
+
+        // Resource production
+        std::string resourceType = "none";
+        float productionRate = 0.0f;
+    };
     /**
      * @brief SceneObject - container pentru un obiect �n scen�
      *
@@ -106,8 +86,10 @@ namespace gps {
         }
 
         // Getters
+
         int GetID() const { return m_id; }
         const std::string& GetName() const { return m_name; }
+        const std::string& GetTag() const { return m_tag; }
         bool IsActive() const { return m_active; }
 
         Transform& GetTransform() { return m_transform; }
@@ -131,6 +113,7 @@ namespace gps {
             m_localCenter = center;
             m_localRadius = radius;
         }
+        void SetTag(const std::string& tag) { m_tag = tag; }
 
         // Update world bounds based on current transform
         void UpdateWorldBounds();
@@ -138,9 +121,13 @@ namespace gps {
         // Movement data (public pentru acces u?or)
         MovementData movement;
 
+        // Unit stats (public for easy access, like MovementData)
+        UnitStats unitStats;
+
     private:
         int m_id;
         std::string m_name;
+        std:: string m_tag;
         bool m_active;
 
         Transform m_transform;

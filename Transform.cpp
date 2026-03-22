@@ -26,6 +26,11 @@ namespace gps {
         MarkDirty();
     }
 
+    void Transform::SetHeight(float height) {
+        m_position.y = height;
+        MarkDirty();
+    }
+
     void Transform::Translate(const glm::vec3& delta) {
         m_position += delta;
         MarkDirty();
@@ -86,7 +91,7 @@ namespace gps {
         // Translation
         m_modelMatrix = glm::translate(m_modelMatrix, m_position);
 
-        // Rotation (aplicãm în ordinea XYZ)
+        // Rotation (aplicï¿½m ï¿½n ordinea XYZ)
         m_modelMatrix = glm::rotate(m_modelMatrix, glm::radians(m_rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
         m_modelMatrix = glm::rotate(m_modelMatrix, glm::radians(m_rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
         m_modelMatrix = glm::rotate(m_modelMatrix, glm::radians(m_rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));

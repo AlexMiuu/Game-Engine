@@ -8,6 +8,7 @@
 #include "SceneManager.hpp"
 #include "SelectionSystem.hpp"
 #include "TileManager.hpp"
+#include "ResourceManager.hpp"
 #include <iostream>
 #include <cstring>
 #include <algorithm>
@@ -151,6 +152,11 @@ namespace gps {
             ImGui::Text("Tiles: %d", m_tileManager->GetLoadedCount());
         }
 
+        // Resources
+        ImGui::SameLine(0, 16);
+        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
+            "Oil: %.0f", gps::ResourceManager::Instance().Get("Oil"));
+
         // Selected
         ImGui::SameLine(0, 30);
         if (m_selectionSystem && m_selectionSystem->HasSelection()) {
@@ -210,7 +216,7 @@ namespace gps {
             ImVec4(0.5f, 0.18f, 0.18f, 1.0f), ImVec4(0.65f, 0.22f, 0.22f, 1.0f)))
         {
             if (m_sceneManager) {
-                m_sceneManager->SpawnObject("Dragon", "dragon",
+                m_sceneManager->SpawnObject("Dragon", "dragon","dragon",
                     glm::vec3(50.0f, -60.0f, -50.0f), glm::vec3(0.5f));
             }
         }
@@ -392,6 +398,8 @@ namespace gps {
                 // Nume mare
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.3f, 1.0f));
                 ImGui::Text("%s", obj->GetName().c_str());
+                ImGui::Text("%d", obj->unitStats.attack);
+                ImGui::Text("%s", obj->GetTag());
                 ImGui::PopStyleColor();
 
                 ImGui::SameLine();
@@ -409,6 +417,27 @@ namespace gps {
 
                 // Bounding info
                 ImGui::Text("Bounds radius: %.1f", obj->GetWorldRadius());
+
+                // HP bar
+                if (obj->unitStats.maxHealth > 0) {
+                    float frac = (float)obj->unitStats.health / (float)obj->unitStats.maxHealth;
+                    ImVec4 barColor = (frac > 0.6f) ? ImVec4(0.2f, 0.8f, 0.2f, 1.0f) :
+                                     (frac > 0.3f) ? ImVec4(1.0f, 0.7f, 0.1f, 1.0f) :
+                                                     ImVec4(0.9f, 0.15f, 0.15f, 1.0f);
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+                    char hpLabel[32];
+                    snprintf(hpLabel, sizeof(hpLabel), "%d / %d HP",
+                        obj->unitStats.health, obj->unitStats.maxHealth);
+                    ImGui::ProgressBar(frac, ImVec2(-1.0f, 14.0f), hpLabel);
+                    ImGui::PopStyleColor();
+
+                    if (obj->unitStats.productionRate > 0.0f) {
+                        ImGui::TextColored(ImVec4(0.8f, 0.9f, 0.4f, 1.0f),
+                            "Producing: %.1f %s/s",
+                            obj->unitStats.productionRate,
+                            obj->unitStats.resourceType.c_str());
+                    }
+                }
 
                 // Moving status
                 if (obj->movement.isMoving) {

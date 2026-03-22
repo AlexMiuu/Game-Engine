@@ -1,6 +1,6 @@
 //
 // Transform.hpp
-// Gestioneazã transformãrile unui obiect (position, rotation, scale)
+// Gestioneazï¿½ transformï¿½rile unui obiect (position, rotation, scale)
 //
 
 #ifndef TRANSFORM_HPP
@@ -13,9 +13,9 @@
 namespace gps {
 
     /**
-     * @brief Clasã pentru transformãri 3D
+     * @brief Clasï¿½ pentru transformï¿½ri 3D
      *
-     * Înlocuie?te: glm::mat4 modelMatrix din main.cpp
+     * ï¿½nlocuie?te: glm::mat4 modelMatrix din main.cpp
      *
      * Exemplu:
      * @code
@@ -35,10 +35,11 @@ namespace gps {
 
         const glm::vec3& GetPosition() const { return m_position; }
         void SetPosition(const glm::vec3& pos);
+        void SetHeight(float height);
         void Translate(const glm::vec3& delta);
 
         // ===========================
-        // ROTATION (Euler angles în grade)
+        // ROTATION (Euler angles ï¿½n grade)
         // ===========================
 
         const glm::vec3& GetRotation() const { return m_rotation; }
@@ -59,12 +60,12 @@ namespace gps {
 
         /**
          * @brief Ob?ine model matrix (Position * Rotation * Scale)
-         * Matrix-ul e cached ?i recalculat doar când e nevoie
+         * Matrix-ul e cached ?i recalculat doar cï¿½nd e nevoie
          */
         const glm::mat4& GetModelMatrix() const;
 
         /**
-         * @brief Seteazã direct model matrix-ul (bypass T*R*S)
+         * @brief Seteazï¿½ direct model matrix-ul (bypass T*R*S)
          */
         void SetModelMatrix(const glm::mat4& matrix);
 
@@ -78,7 +79,7 @@ namespace gps {
 
     private:
         glm::vec3 m_position;
-        glm::vec3 m_rotation;  // Euler angles (X, Y, Z) în grade
+        glm::vec3 m_rotation;  // Euler angles (X, Y, Z) ï¿½n grade
         glm::vec3 m_scale;
 
         mutable glm::mat4 m_modelMatrix;
