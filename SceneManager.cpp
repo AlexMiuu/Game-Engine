@@ -97,6 +97,9 @@ namespace gps {
         // Calculeaz� bounding sphere
         ComputeAndSetBoundingSphere(troop, model);
 
+        UnitStats objectStats = InitializeUnitsStats(troop);
+        troop->unitStats = objectStats;
+
         // Set collision radius
         troop->SetCollisionRadius(5.0f);
 
@@ -144,6 +147,7 @@ namespace gps {
 
     SceneObject* SceneManager::SpawnObject(
         const std::string& name,
+        const std::string& tag,
         const std::string& modelName,
         const glm::vec3& position,
         const glm::vec3& scale)
@@ -163,8 +167,13 @@ namespace gps {
         obj->GetTransform().SetPosition(position);
         obj->GetTransform().SetScale(scale);
         obj->SetModel(model);
+        obj->SetTag(tag);
+
 
         ComputeAndSetBoundingSphere(obj, model);
+        
+        UnitStats objectStats = InitializeUnitsStats(obj);
+        obj->unitStats = objectStats;
 
         std::cout << "?? Spawned object '" << name << "' (ID: " << obj->GetID() << ")" << std::endl;
 
@@ -214,7 +223,7 @@ namespace gps {
     void SceneManager::CreateInitialTroops(int count) {
         std::cout << "??? Creating initial troops (" << count << ")..." << std::endl;
 
-        Model3D* orcModel = GetModel("pikeman");
+        Model3D* orcModel = GetModel("ship");
         if (!orcModel) {
             std::cout << "?? Orc model not found, skipping troops" << std::endl;
             return;
@@ -233,11 +242,15 @@ namespace gps {
 
             glm::vec3 position = m_troopSpawnPos + glm::vec3(offsetX, 0.0f, offsetZ);
 
-            SceneObject* troop = m_scene->CreateObject("Orc");
+            SceneObject* troop = m_scene->CreateObject("ship");
             troop->GetTransform().SetPosition(position);
             troop->SetModel(orcModel);
+            troop->SetTag("ship");
 
             ComputeAndSetBoundingSphere(troop, orcModel);
+
+            UnitStats objectStats = InitializeUnitsStats(troop);
+            troop->unitStats = objectStats;
 
             // Set collision radius
             troop->SetCollisionRadius(5.0f);
@@ -301,5 +314,35 @@ namespace gps {
         outCenter = 0.5f * (minPos + maxPos);
         outRadius = glm::length(maxPos - minPos) * 0.5f;
     }
+
+
+	UnitStats SceneManager::InitializeUnitsStats(SceneObject* object) {
+		
+		std::string tag = object->GetTag();
+        UnitStats stats= object->unitStats;
+
+        if (tag == "ship")
+        {
+            stats.health = 100;
+            stats.attack = 20;
+            stats.maxHealth = 100;
+            stats.attackRange = 15.0f;
+            stats.isCombatUnit = true;
+            stats.isAlive = true;
+        }
+        else if (tag == "oilRig")
+        {
+            stats.health = 200;
+            stats.attack = 0;
+            stats.maxHealth = 200;
+            stats.attackRange = 0.0f;
+            stats.isCombatUnit = false;
+            stats.isAlive = true;
+            stats.resourceType = "Oil";
+            stats.productionRate = 5.0f;
+        }
+
+        return stats;
+	}
 
 } // namespace gps
