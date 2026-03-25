@@ -18,18 +18,18 @@ namespace gps {
     GuiManager::GuiManager()
         : m_initialized(false)
         , m_window(nullptr)
-        , m_showDebugPanel(false)
+        , m_showDebugPanel(true)
         , m_scene(nullptr)
         , m_sceneManager(nullptr)
         , m_selectionSystem(nullptr)
         , m_tileManager(nullptr)
-        , m_tileGridSize(3)
+        , m_tileGridSize(5)
         , m_cameraPos(0.0f)
         , m_deltaTime(0.016f)
         , m_zoomFactor(1.0f)
         , m_fpsHistoryIdx(0)
-        , m_tileSize(300)
-        , m_tileModelScale(1.0f)
+        , m_tileSize(256)
+        , m_tileModelScale(27)
         , heightTile(2.0f)
     {
         memset(m_fpsHistory, 0, sizeof(m_fpsHistory));
@@ -303,8 +303,8 @@ namespace gps {
 
             ImGui::Spacing();
             ImGui::SeparatorText("Resize");
-            ImGui::SliderInt("Grid Tile Size", &m_tileSize, 10, 1000);
-            ImGui::SliderFloat("Tile Model Scale", &m_tileModelScale, 0.10f, 255.00f, "%.2f");
+            ImGui::InputInt("Grid Tile Size", &m_tileSize);
+            ImGui::InputInt("Tile Model Scale", &m_tileModelScale);
             ImGui::InputInt("TILEHEIGHT", &heightTile);
 
             if (ImGui::Button("Apply Resize", ImVec2(btnWidth, 28)))

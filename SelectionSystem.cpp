@@ -248,6 +248,22 @@ namespace gps {
         }
     }
 
+    int SelectionSystem::GetObjectAtPoint(Scene& scene, const Camera& camera, const glm::mat4& projection, const glm::vec2& screenPos) const {
+        Ray ray = ComputeOrthoRay(screenPos, camera, projection);
+        float closest = FLT_MAX; 
+        int bestID = -1;
+     for (const auto& objPtr : scene.GetObjects()) {
+        SceneObject* obj = objPtr.get();
+        if (!obj->IsActive() || !obj->GetModel()) continue;
+        float sphereDist;
+        if (!RayIntersectsSphere(ray, obj->GetWorldCenter(), obj->GetWorldRadius(), sphereDist)) continue;
+        float meshDist; glm::vec3 hit;
+        if (RayIntersectsModelWithMatrix(ray, *obj->GetModel(), obj->GetTransform().GetModelMatrix(), meshDist, hit))
+            if (meshDist < closest) { closest = meshDist; bestID = obj->GetID(); }
+    }
+    return bestID;
+    }
+
     // ===========================
     // SELECTION QUERIES
     // ===========================
@@ -357,7 +373,8 @@ namespace gps {
         return (name.find("Troop") != std::string::npos ||
             name.find("Orc") != std::string::npos ||
             name.find("Pikeman") != std::string::npos ||
-            name.find("Ship") != std::string::npos);
+            name.find("Ship") != std::string::npos) ||
+            name.find("OilRig") != std::string::npos;
     }
 
     bool SelectionSystem::IsObjectInSelectionBox(const SceneObject& obj,

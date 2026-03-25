@@ -80,8 +80,9 @@ GLint lightDirLoc;
 GLint viewPosLoc;
 GLint isSelectedLoc;  // Pentru highlight
 
-GLint highlightColorLoc;     
+GLint highlightColorLoc;
 GLint objectIDLoc;
+GLint isGhostLoc;
 
 // ===========================
 // LIGHTING
@@ -115,7 +116,6 @@ gps::Model3D orcModel;         // Trupe
 gps::Model3D rightWingModel;
 gps::Model3D Pikeman;
 gps::Model3D waterTyle;
-glm::vec3 g_waterTileScale = glm::vec3(10.0f);
 gps::Model3D shipModel;
 gps::Model3D oilRigModel;
 
@@ -154,7 +154,7 @@ gps::GuiManager* g_guiManager = nullptr;
 // ===========================
 bool g_propPlacementMode = false;
 std::string g_propModelToPlace = "ship";
-glm::vec3 g_propScaleToPlace = glm::vec3(2.5f);
+glm::vec3 g_propScaleToPlace = glm::vec3(5.5f);
 std::string g_propLabelToPlace = "Ship";
 std::string g_propTagToPlace = "ship";
 int g_nextPlacedPropID = 10001;
@@ -306,6 +306,31 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     // LEFT MOUSE - Selection
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
+
+			int hitID = g_selectionSystem->GetObjectAtPoint(*g_scene, myCamera, projection, mousePos);
+            if (hitID != -1 && g_selectionSystem->HasSelection() && !g_selectionSystem->IsSelected(hitID)) {
+                gps::SceneObject* target = g_scene->GetObjectByID(hitID);
+                if (target && target->unitStats.isAlive)
+                {
+                    // Determine attacker faction from first selected unit
+                    int atkFaction = 0;
+                    const auto& selIDs = g_selectionSystem->GetSelectedIDs();
+                    if (!selIDs.empty()) {
+                        const int firstSelectedID = *selIDs.begin();
+                        gps::SceneObject* first = g_scene->GetObjectByID(firstSelectedID);
+                        if (first) atkFaction = first->unitStats.faction;
+                    }
+                    int tgtFaction = target->unitStats.faction;
+                    bool sameFaction = (atkFaction != 0 && tgtFaction != 0 && atkFaction == tgtFaction);
+                    if (!sameFaction) {
+                        for (int selfID : selIDs) {
+                            gps::SceneObject* attacker = g_scene->GetObjectByID(selfID);
+                            if (attacker) attacker->unitStats.targetID = hitID;
+                        }
+                    }
+                }
+                return;
+            }
             g_selectionSystem->StartBoxSelection(mousePos);
         }
         else if (action == GLFW_RELEASE) {
@@ -342,7 +367,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         for (int troopID : selectedIDs) {
             gps::SceneObject* obj = g_scene->GetObjectByID(troopID);
             if (!obj) continue;
-
+            if (!obj->unitStats.isMovable) continue; 
             int row = idx / columns;
             int col = idx % columns;
             float offsetX = (col - columns / 2.0f) * spacing;
@@ -412,16 +437,6 @@ void initGui() {
 
     // ─── Adauga butoane custom (optional) ───
 
-    // Buton: Spawn Dragon
-    gps::GuiButton dragonBtn;
-    dragonBtn.label = "🐉 Spawn Dragon";
-    dragonBtn.tooltip = "Spawneaza un dragon la pozitia default";
-    dragonBtn.color = glm::vec4(0.6f, 0.2f, 0.2f, 1.0f);
-    dragonBtn.callback = [&]() {
-        g_sceneManager->SpawnObject("Dragon", "dragon","dragon",
-            glm::vec3(50.0f, -60.0f, -50.0f), glm::vec3(0.5f));
-        };
-    g_guiManager->AddButton(dragonBtn);
 
     // Buttons: arm click-to-place prop mode
     gps::GuiButton placeShipBtn;
@@ -429,17 +444,25 @@ void initGui() {
     placeShipBtn.tooltip = "Pune o nava pe harta, click stanga pe harta pentru spawn.";
     placeShipBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
     placeShipBtn.callback = [&]() {
-        ArmPropPlacement("ship","ship", glm::vec3(2.5f), "Ship");
+        ArmPropPlacement("ship","ship", glm::vec3(4.5f), "Ship");
         };
     g_guiManager->AddButton(placeShipBtn);
 
+    gps::GuiButton placeEnemyShipBtn;
+    placeEnemyShipBtn.label = "Spawn Enemy Ship";
+    placeEnemyShipBtn.tooltip = "Pune o nava inamica pe harta.";
+    placeEnemyShipBtn.color = glm::vec4(0.7f, 0.1f, 0.1f, 1.0f);
+    placeEnemyShipBtn.callback = [&]() {
+        ArmPropPlacement("ship", "enemyShip", glm::vec3(4.5f), "EnemyShip");
+        };
+    g_guiManager->AddButton(placeEnemyShipBtn);
 
     gps::GuiButton placeOilRigBtn;
     placeOilRigBtn.label = "Spawn Oil Rig";
     placeOilRigBtn.tooltip = "Pune un rig de ulei pe harta, click stanga pe harta pentru spawn.";
     placeOilRigBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
     placeOilRigBtn.callback = [&]() {
-        ArmPropPlacement("oilRig","oilRig", glm::vec3(2.5f), "Oil Rig");
+        ArmPropPlacement("oilRig","oilRig", glm::vec3(2.5f), "OilRig");
         };
     g_guiManager->AddButton(placeOilRigBtn);
 
@@ -576,8 +599,9 @@ void initUniforms() {
     lightDirLoc = glGetUniformLocation(myCustomShader.shaderProgram, "lightDir");
     viewPosLoc = glGetUniformLocation(myCustomShader.shaderProgram, "viewPos");
     isSelectedLoc = glGetUniformLocation(myCustomShader.shaderProgram, "isSelected");
-    highlightColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "highlightColor");  
+    highlightColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "highlightColor");
     objectIDLoc = glGetUniformLocation(myCustomShader.shaderProgram, "objectID");
+    isGhostLoc = glGetUniformLocation(myCustomShader.shaderProgram, "isGhost");
 
 // Set light direction
   //  glUniform3fv(lightDirLoc, 1, glm::value_ptr(lightDir));
@@ -649,7 +673,6 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("oilRig", &oilRigModel);
 
     g_tileManager.Initialize(&waterTyle, g_scene);
-    g_tileManager.SetTileModelScale(g_waterTileScale);
     // Generate initial 3x3 tile grid centered at origin
     g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
 
@@ -680,7 +703,7 @@ void initCollisionSystem() {
 
 void initCombatSystem() {
     g_combatSystem = new gps::CombatSystem();
-    g_combatSystem->Initialize(g_scene);
+    g_combatSystem->Initialize(g_scene, g_sceneManager);
 
     // Starting resources
     gps::ResourceManager::Instance().Set("Oil",  50.0f);
@@ -796,6 +819,41 @@ void renderScene(gps::Shader shader) {
         }
         // Draw
         obj->GetModel()->Draw(shader);
+    }
+
+    // Ghost placement preview
+    if (g_propPlacementMode && g_sceneManager) {
+        gps::Model3D* ghostModel = g_sceneManager->GetModel(g_propModelToPlace);
+        if (ghostModel) {
+            glm::vec2 mousePos = gps::InputManager::Instance().GetMousePosition();
+            glm::vec3 ghostPos = screenToWorld(mousePos);
+
+            glm::vec3 gridMin, gridMax;
+            if (g_tileManager.GetGridBounds(gridMin, gridMax)) {
+                ghostPos.x = glm::clamp(ghostPos.x, gridMin.x, gridMax.x);
+                ghostPos.z = glm::clamp(ghostPos.z, gridMin.z, gridMax.z);
+            }
+
+            glm::mat4 ghostMatrix = glm::scale(
+                glm::translate(glm::mat4(1.0f), ghostPos),
+                g_propScaleToPlace);
+            glm::mat3 ghostNormal = glm::mat3(glm::transpose(glm::inverse(view * ghostMatrix)));
+
+            glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(ghostMatrix));
+            glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(ghostNormal));
+            glUniform1i(isSelectedLoc, 0);
+            glUniform1i(isGhostLoc, 1);
+
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+            glDepthMask(GL_FALSE);
+
+            ghostModel->Draw(shader);
+
+            glDepthMask(GL_TRUE);
+            glDisable(GL_BLEND);
+            glUniform1i(isGhostLoc, 0);
+        }
     }
 }
 
@@ -949,48 +1007,75 @@ int main(int argc, const char* argv[]) {
         glm::vec3 gridBoundsMin, gridBoundsMax;
         bool hasGridBounds = g_tileManager.GetGridBounds(gridBoundsMin, gridBoundsMax);
 
+        // Movement loop
         for (const auto& objPtr : g_scene->GetObjects()) {
             gps::SceneObject* obj = objPtr.get();
 
-            if (obj->movement.isMoving) {
-                glm::vec3 oldPos = obj->GetTransform().GetPosition();
+            if (!obj->movement.isMoving) continue;
 
-                float elapsed = static_cast<float>(currentTime) - obj->movement.moveStartTime;
-                float alpha = elapsed / obj->movement.moveDuration;
+            glm::vec3 oldPos = obj->GetTransform().GetPosition();
 
-                if (alpha >= 1.0f) {
-                    alpha = 1.0f;
-                    obj->movement.isMoving = false;
-                }
+            float elapsed = static_cast<float>(currentTime) - obj->movement.moveStartTime;
+            float alpha = elapsed / obj->movement.moveDuration;
 
-                glm::vec3 newPos = glm::mix(obj->movement.moveStartPos, obj->movement.moveEndPos, alpha);
+            if (alpha >= 1.0f) {
+                alpha = 1.0f;
+                obj->movement.isMoving = false;
+            }
 
-                // Clamp position to tile grid bounds
-                if (hasGridBounds) {
-                    newPos.x = glm::clamp(newPos.x, gridBoundsMin.x, gridBoundsMax.x);
-                    newPos.z = glm::clamp(newPos.z, gridBoundsMin.z, gridBoundsMax.z);
-                }
+            glm::vec3 newPos = glm::mix(obj->movement.moveStartPos, obj->movement.moveEndPos, alpha);
 
-                obj->GetTransform().SetPosition(newPos);
+            // Clamp to tile grid bounds (skip for projectiles)
+            if (hasGridBounds && !obj->projectileData.isProjectile) {
+                newPos.x = glm::clamp(newPos.x, gridBoundsMin.x, gridBoundsMax.x);
+                newPos.z = glm::clamp(newPos.z, gridBoundsMin.z, gridBoundsMax.z);
+            }
 
-                if (glm::length(obj->movement.moveDirection) > 0.0001f) {
-                    float yaw = glm::degrees(std::atan2(obj->movement.moveDirection.x, -obj->movement.moveDirection.z));
-                    glm::vec3 currentRot = obj->GetTransform().GetRotation();
-                    obj->GetTransform().SetRotation(glm::vec3(currentRot.x, -yaw, currentRot.z));
-                }
+            obj->GetTransform().SetPosition(newPos);
 
+            if (glm::length(obj->movement.moveDirection) > 0.0001f) {
+                float yaw = glm::degrees(std::atan2(obj->movement.moveDirection.x, -obj->movement.moveDirection.z));
+                glm::vec3 currentRot = obj->GetTransform().GetRotation();
+                obj->GetTransform().SetRotation(glm::vec3(currentRot.x, -yaw, currentRot.z));
+            }
+
+            obj->UpdateWorldBounds();
+
+            // Collision check: revert and stop if colliding (skip for projectiles)
+            if (g_collisionSystem && !obj->projectileData.isProjectile && g_collisionSystem->CheckCollisions(obj)) {
+                obj->GetTransform().SetPosition(oldPos);
                 obj->UpdateWorldBounds();
-
-                // Collision check: revert and stop if colliding
-                if (g_collisionSystem && g_collisionSystem->CheckCollisions(obj)) {
-                    obj->GetTransform().SetPosition(oldPos);
-                    obj->UpdateWorldBounds();
-                    obj->movement.isMoving = false;
-                }
+                obj->movement.isMoving = false;
             }
         }
 
-            myCustomShader.useShaderProgram();
+        // Projectile arrival: apply damage and destroy stopped projectiles
+        {
+            std::vector<int> toDestroy;
+            std::vector<int> killed;
+            for (const auto& objPtr : g_scene->GetObjects()) {
+                gps::SceneObject* obj = objPtr.get();
+                if (!obj->IsActive() || !obj->projectileData.isProjectile || obj->movement.isMoving) continue;
+                gps::SceneObject* target = g_scene->GetObjectByID(obj->projectileData.targetID);
+                if (target && target->IsActive() && target->unitStats.isAlive) {
+                    target->unitStats.health -= (int)obj->projectileData.damage;
+                    if (target->unitStats.health <= 0) {
+                        target->unitStats.health  = 0;
+                        target->unitStats.isAlive  = false;
+                        target->SetActive(false);
+                        killed.push_back(target->GetID());
+                    }
+                }
+                toDestroy.push_back(obj->GetID());
+            }
+            for (int id : killed) {
+                if (g_selectionSystem) g_selectionSystem->RemoveFromSelection(id);
+                g_scene->DestroyObject(id);
+            }
+            for (int id : toDestroy) g_scene->DestroyObject(id);
+        }
+
+    myCustomShader.useShaderProgram();
     
     glm::mat4 view = myCamera.getViewMatrix();
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));

@@ -123,7 +123,7 @@ namespace gps {
         bool ColoredButton(const char* label, ImVec2 size, ImVec4 color, ImVec4 hoverColor);
 
         int m_tileSize;
-        float m_tileModelScale;
+        int m_tileModelScale;
 
         int heightTile;
     };

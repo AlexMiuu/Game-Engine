@@ -1,6 +1,6 @@
 //
 // SelectionSystem.hpp
-// Sistem pentru selec?ia unitã?ilor (box selection + single click)
+// Sistem pentru selec?ia unitï¿½?ilor (box selection + single click)
 //
 
 #ifndef SELECTION_SYSTEM_HPP
@@ -27,14 +27,14 @@
 namespace gps {
 
     /**
-     * @brief Sistem pentru selec?ia unitã?ilor
+     * @brief Sistem pentru selec?ia unitï¿½?ilor
      *
      * Features:
      * - Box selection (drag mouse pentru dreptunghi)
      * - Single selection (click pe unitate)
      * - Additive selection (SHIFT + click/drag)
      * - Visual feedback (box rendering)
-     * - Filtrare pe tip de obiect (selecteazã doar trupe)
+     * - Filtrare pe tip de obiect (selecteazï¿½ doar trupe)
      *
      * Exemplu de utilizare:
      * @code
@@ -42,7 +42,7 @@ namespace gps {
      * selection.Initialize(1920, 1080);
      * selection.LoadShader("shaders/selection.vert", "shaders/selection.frag");
      *
-     * // În mouse button callback:
+     * // ï¿½n mouse button callback:
      * if (mousePressed) {
      *     selection.StartBoxSelection(mousePos);
      * }
@@ -50,7 +50,7 @@ namespace gps {
      *     selection.EndBoxSelection(scene, camera, projection, shiftHeld);
      * }
      *
-     * // În render loop:
+     * // ï¿½n render loop:
      * selection.Render();
      *
      * // Query selected:
@@ -73,14 +73,14 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Ini?ializeazã sistemul de selec?ie
-         * @param screenWidth Lã?imea ecranului
-         * @param screenHeight Înãl?imea ecranului
+         * @brief Ini?ializeazï¿½ sistemul de selec?ie
+         * @param screenWidth Lï¿½?imea ecranului
+         * @param screenHeight ï¿½nï¿½l?imea ecranului
          */
         void Initialize(int screenWidth, int screenHeight);
 
         /**
-         * @brief Încarcã shader-ul pentru rendering box
+         * @brief ï¿½ncarcï¿½ shader-ul pentru rendering box
          * @param vertPath Path la vertex shader
          * @param fragPath Path la fragment shader
          */
@@ -105,29 +105,29 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Începe box selection
+         * @brief ï¿½ncepe box selection
          * @param screenPos Pozi?ia mouse-ului pe ecran (pixeli)
          */
         void StartBoxSelection(const glm::vec2& screenPos);
 
         /**
-         * @brief Actualizeazã box selection (mouse drag)
-         * @param screenPos Pozi?ia curentã a mouse-ului
+         * @brief Actualizeazï¿½ box selection (mouse drag)
+         * @param screenPos Pozi?ia curentï¿½ a mouse-ului
          */
         void UpdateBoxSelection(const glm::vec2& screenPos);
 
         /**
-         * @brief Finalizeazã box selection ?i selecteazã obiectele
+         * @brief Finalizeazï¿½ box selection ?i selecteazï¿½ obiectele
          * @param scene Scena cu obiecte
          * @param camera Camera pentru proiec?ii
          * @param projection Matricea de proiec?ie
-         * @param additive Dacã true, adaugã la selec?ia existentã (SHIFT held)
+         * @param additive Dacï¿½ true, adaugï¿½ la selec?ia existentï¿½ (SHIFT held)
          */
         void EndBoxSelection(Scene& scene, const Camera& camera,
             const glm::mat4& projection, bool additive);
 
         /**
-         * @brief Verificã dacã box selection e activã
+         * @brief Verificï¿½ dacï¿½ box selection e activï¿½
          */
         bool IsBoxSelecting() const { return m_isBoxSelecting; }
 
@@ -136,12 +136,12 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Selecteazã un singur obiect la pozi?ia mouse-ului
+         * @brief Selecteazï¿½ un singur obiect la pozi?ia mouse-ului
          * @param scene Scena
          * @param camera Camera
          * @param projection Matricea de proiec?ie
          * @param screenPos Pozi?ia mouse-ului
-         * @param additive Dacã true, adaugã la selec?ie
+         * @param additive Dacï¿½ true, adaugï¿½ la selec?ie
          */
         void SelectAtPoint(Scene& scene, const Camera& camera,
             const glm::mat4& projection,
@@ -157,17 +157,17 @@ namespace gps {
         const std::unordered_set<int>& GetSelectedIDs() const { return m_selectedIDs; }
 
         /**
-         * @brief Verificã dacã un obiect e selectat
+         * @brief Verificï¿½ dacï¿½ un obiect e selectat
          */
         bool IsSelected(int id) const;
 
         /**
-         * @brief Ob?ine numãrul de obiecte selectate
+         * @brief Ob?ine numï¿½rul de obiecte selectate
          */
         size_t GetSelectionCount() const { return m_selectedIDs.size(); }
 
         /**
-         * @brief Verificã dacã existã selec?ie
+         * @brief Verificï¿½ dacï¿½ existï¿½ selec?ie
          */
         bool HasSelection() const { return !m_selectedIDs.empty(); }
 
@@ -181,7 +181,7 @@ namespace gps {
         void ClearSelection();
 
         /**
-         * @brief Adaugã un obiect la selec?ie
+         * @brief Adaugï¿½ un obiect la selec?ie
          */
         void AddToSelection(int id);
 
@@ -191,9 +191,9 @@ namespace gps {
         void RemoveFromSelection(int id);
 
         /**
-         * @brief Selecteazã toate obiectele de un anumit tip
+         * @brief Selecteazï¿½ toate obiectele de un anumit tip
          * @param scene Scena
-         * @param nameFilter Filtreazã dupã nume (ex: "Troop", "Orc")
+         * @param nameFilter Filtreazï¿½ dupï¿½ nume (ex: "Troop", "Orc")
          */
         void SelectAllOfType(Scene& scene, const std::string& nameFilter);
 
@@ -202,17 +202,17 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Deseneazã box-ul de selec?ie
+         * @brief Deseneazï¿½ box-ul de selec?ie
          */
         void Render();
 
         /**
-         * @brief Seteazã culoarea box-ului
+         * @brief Seteazï¿½ culoarea box-ului
          */
         void SetBoxColor(const glm::vec4& color) { m_boxColor = color; }
 
         /**
-         * @brief Seteazã culoarea highlight pentru obiecte selectate
+         * @brief Seteazï¿½ culoarea highlight pentru obiecte selectate
          */
         void SetHighlightColor(const glm::vec3& color) { m_highlightColor = color; }
 
@@ -221,19 +221,21 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Seteazã dimensiunea ecranului (pentru conversii NDC)
+         * @brief Seteazï¿½ dimensiunea ecranului (pentru conversii NDC)
          */
         void SetScreenSize(int width, int height);
 
         /**
-         * @brief Activeazã/dezactiveazã highlight vizual
+         * @brief Activeazï¿½/dezactiveazï¿½ highlight vizual
          */
         void SetHighlightEnabled(bool enabled) { m_highlightEnabled = enabled; }
 
         /**
-         * @brief Seteazã dimensiunea minimã a box-ului pentru a fi valid
+         * @brief Seteazï¿½ dimensiunea minimï¿½ a box-ului pentru a fi valid
          */
         void SetMinBoxSize(float size) { m_minBoxSize = size; }
+
+        int GetObjectAtPoint(Scene& scene, const Camera& camera,const glm::mat4& projection,const glm::vec2& screenPos) const;
 
     private:
         // ===========================
@@ -269,43 +271,43 @@ namespace gps {
         // ===========================
 
         /**
-         * @brief Ini?ializeazã resursele OpenGL pentru rendering
+         * @brief Ini?ializeazï¿½ resursele OpenGL pentru rendering
          */
         void InitializeRenderResources();
 
         /**
-         * @brief Verificã dacã un obiect poate fi selectat
+         * @brief Verificï¿½ dacï¿½ un obiect poate fi selectat
          */
         bool IsSelectable(const SceneObject& obj) const;
 
         /**
-         * @brief Verificã dacã un obiect e în box-ul de selec?ie
+         * @brief Verificï¿½ dacï¿½ un obiect e ï¿½n box-ul de selec?ie
          */
         bool IsObjectInSelectionBox(const SceneObject& obj,
             const Camera& camera,
             const glm::mat4& projection);
 
         /**
-         * @brief Converte?te coordonate screen în NDC
+         * @brief Converte?te coordonate screen ï¿½n NDC
          */
         glm::vec2 ScreenToNDC(const glm::vec2& screenPos) const;
 
         /**
-         * @brief Proiecteazã un punct 3D în screen space
+         * @brief Proiecteazï¿½ un punct 3D ï¿½n screen space
          */
         glm::vec3 ProjectToScreen(const glm::vec3& worldPos,
             const Camera& camera,
             const glm::mat4& projection) const;
 
         /**
-         * @brief Verificã dacã un punct e în dreptunghi NDC
+         * @brief Verificï¿½ dacï¿½ un punct e ï¿½n dreptunghi NDC
          */
         bool IsPointInBox(const glm::vec2& point,
             const glm::vec2& boxMin,
             const glm::vec2& boxMax) const;
 
         /**
-         * @brief Actualizeazã mesh-ul box-ului
+         * @brief Actualizeazï¿½ mesh-ul box-ului
          */
         void UpdateBoxMesh();
 
@@ -315,7 +317,7 @@ namespace gps {
         void SetupRenderState();
 
         /**
-         * @brief Restore OpenGL state dupã rendering
+         * @brief Restore OpenGL state dupï¿½ rendering
          */
         void RestoreRenderState();
 

@@ -51,7 +51,7 @@ namespace gps {
     // ===========================
     class TileManager {
     public:
-        TileManager(float tileSize = 300.0f);
+        TileManager(float tileSize = 257.0f, glm::vec3 model_size= glm::vec3(27.0f), int height=-60);
 
         // ===========================
         // INITIALIZATION

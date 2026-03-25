@@ -13,11 +13,12 @@
 
 namespace gps {
 
-    TileManager::TileManager(float tileSize)
+    TileManager::TileManager(float tileSize, glm::vec3 model_size, int height)
         : m_terrainModel(nullptr)
         , m_scene(nullptr)
         , m_tileSize(tileSize)
-        , m_tileModelScale(1.0f)
+        , m_tileModelScale(model_size)
+		, heightTile(height) 
     {
     }
 
@@ -402,7 +403,9 @@ namespace gps {
         // Seteaza transform
         obj->GetTransform().SetPosition(tile.worldPos);
         obj->GetTransform().SetScale(m_tileModelScale);
-
+        obj->GetTransform().SetHeight(heightTile);
+        obj->unitStats.faction= -1;
+        obj->unitStats.isAlive = false;
         // Calculeaza bounding sphere
         glm::vec3 center;
         float radius;

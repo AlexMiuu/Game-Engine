@@ -53,8 +53,8 @@ namespace gps {
         std::cout << "?? Setting up scene..." << std::endl;
 
         // Creeaz� componentele scenei
-        CreateTerrain();
-        CreateStaticObjects();
+       // CreateTerrain();
+       // CreateStaticObjects();
         CreateInitialTroops(5);
 
         std::cout << "? Scene setup complete! Objects in scene: "
@@ -175,6 +175,9 @@ namespace gps {
         UnitStats objectStats = InitializeUnitsStats(obj);
         obj->unitStats = objectStats;
 
+        obj->SetCollisionRadius(5.0f);
+
+
         std::cout << "?? Spawned object '" << name << "' (ID: " << obj->GetID() << ")" << std::endl;
 
         return obj;
@@ -242,7 +245,7 @@ namespace gps {
 
             glm::vec3 position = m_troopSpawnPos + glm::vec3(offsetX, 0.0f, offsetZ);
 
-            SceneObject* troop = m_scene->CreateObject("ship");
+            SceneObject* troop = m_scene->CreateObject("Ship");
             troop->GetTransform().SetPosition(position);
             troop->SetModel(orcModel);
             troop->SetTag("ship");
@@ -324,11 +327,24 @@ namespace gps {
         if (tag == "ship")
         {
             stats.health = 100;
+            stats.attack = 40;
+            stats.maxHealth = 100;
+            stats.attackRange = 55.0f;
+            stats.isCombatUnit = true;
+            stats.isAlive = true;
+            stats.isMovable = true;
+            stats.faction = 1;
+        }
+        else if (tag == "enemyShip")
+        {
+            stats.health = 100;
             stats.attack = 20;
             stats.maxHealth = 100;
             stats.attackRange = 15.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
+            stats.isMovable = true;
+            stats.faction = 2;
         }
         else if (tag == "oilRig")
         {
@@ -340,6 +356,7 @@ namespace gps {
             stats.isAlive = true;
             stats.resourceType = "Oil";
             stats.productionRate = 5.0f;
+            stats.isMovable = false;
         }
 
         return stats;

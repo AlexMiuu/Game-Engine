@@ -39,14 +39,25 @@ namespace gps {
         int attackRange = 5;
         bool isCombatUnit = false;
         bool isAlive = true;
-
+        bool isMovable = true;
         // Runtime combat state (managed by CombatSystem)
         float attackCooldown = 0.0f;
         int   targetID = -1;
+        
 
         // Resource production
         std::string resourceType = "none";
         float productionRate = 0.0f;
+
+        // Faction: 0 = neutral (attackable by all), 1 = team 1, 2 = team 2
+        int faction = 0;
+    };
+
+    struct ProjectileData {
+        bool  isProjectile = false;
+        int   ownerID  = -1;
+        int   targetID = -1;
+        float damage   = 0.0f;
     };
     /**
      * @brief SceneObject - container pentru un obiect �n scen�
@@ -123,6 +134,8 @@ namespace gps {
 
         // Unit stats (public for easy access, like MovementData)
         UnitStats unitStats;
+
+        ProjectileData projectileData;
 
     private:
         int m_id;

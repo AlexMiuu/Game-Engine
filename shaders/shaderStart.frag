@@ -28,6 +28,7 @@ in vec4 FragPosLightSpace;
 uniform bool isSelected;
 uniform vec3 highlightColor;
 uniform int objectID;
+uniform bool isGhost;
 
 void computeLightComponents(out vec3 ambient, out vec3 diffuse, out vec3 specular) {
     vec3 normalEye = normalize(fNormal);
@@ -112,8 +113,14 @@ void main() {
 
     vec3 lighting =  (ambDir + (1.0 - shadowAmount ) * (diffDir + specDir))+ (ambientP + (1.0 - shadowAmount) * (diffuseP + specularP));
 
+    if (isGhost) {
+        // Ghost placement preview: blue tint, semi-transparent
+        fColor = vec4(mix(clamp(lighting, 0.0, 1.0), vec3(0.3, 0.6, 1.0), 0.5), 0.35);
+        return;
+    }
+
     fColor = vec4(clamp(lighting, 0.0, 1.0), 1.0);
-if (isSelected) {
-    fColor = mix(fColor, vec4(highlightColor, 1.0), 0.3); // 30% highlight
-}
+    if (isSelected) {
+        fColor = mix(fColor, vec4(highlightColor, 1.0), 0.3);
+    }
 }
