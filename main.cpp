@@ -70,6 +70,18 @@ gps::Shader myCustomShader;
 gps::Shader depthMapShader;
 gps::Shader skyboxShader;
 gps::Shader boxSelectionShader;
+gps::Shader rangeCircleShader;
+
+// Range circle geometry
+GLuint g_circleVAO = 0;
+GLuint g_circleVBO = 0;
+int    g_circleVertCount = 0;
+
+// Range circle uniform locations
+GLint circleModelLoc = -1;
+GLint circleViewLoc  = -1;
+GLint circleProjLoc  = -1;
+GLint circleColorLoc = -1;
 
 // Uniform locations
 GLint modelLoc;
@@ -216,6 +228,8 @@ void updateDeltaTime();
 void renderScene(gps::Shader shader);
 void renderShadowMap();
 void renderSkyBox();
+void initRangeCircle();
+void renderRangeCircles();
 
 glm::vec3 screenToWorld(const glm::vec2& screenPos);
 
@@ -313,7 +327,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                 if (target && target->unitStats.isAlive)
                 {
                     // Determine attacker faction from first selected unit
-                    int atkFaction = 0;
+                    int atkFaction = 0; 
                     const auto& selIDs = g_selectionSystem->GetSelectedIDs();
                     if (!selIDs.empty()) {
                         const int firstSelectedID = *selIDs.begin();
@@ -714,6 +728,85 @@ void initCombatSystem() {
 
 
 // ===========================
+// RANGE CIRCLE
+// ===========================
+
+void initRangeCircle() {
+    const int N = 64;
+    std::vector<glm::vec3> verts;
+    verts.reserve(N);
+    for (int i = 0; i < N; i++) {
+        float angle = 2.0f * glm::pi<float>() * i / N;
+        verts.push_back({ std::cos(angle), 0.0f, std::sin(angle) });
+    }
+    g_circleVertCount = N;
+
+    glGenVertexArrays(1, &g_circleVAO);
+    glGenBuffers(1, &g_circleVBO);
+    glBindVertexArray(g_circleVAO);
+    glBindBuffer(GL_ARRAY_BUFFER, g_circleVBO);
+    glBufferData(GL_ARRAY_BUFFER, (GLsizeiptr)(verts.size() * sizeof(glm::vec3)), verts.data(), GL_STATIC_DRAW);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(glm::vec3), (void*)0);
+    glBindVertexArray(0);
+
+    rangeCircleShader.loadShader("shaders/rangeCircle.vert", "shaders/rangeCircle.frag");
+    circleModelLoc = glGetUniformLocation(rangeCircleShader.shaderProgram, "model");
+    circleViewLoc  = glGetUniformLocation(rangeCircleShader.shaderProgram, "view");
+    circleProjLoc  = glGetUniformLocation(rangeCircleShader.shaderProgram, "projection");
+    circleColorLoc = glGetUniformLocation(rangeCircleShader.shaderProgram, "circleColor");
+
+    std::cout << "✅ Range circle initialized" << std::endl;
+}
+
+void renderRangeCircles() {
+    if (!g_scene || !g_selectionSystem || !g_selectionSystem->HasSelection()) return;
+    if (g_circleVAO == 0) return;
+
+    rangeCircleShader.useShaderProgram();
+
+    glm::mat4 view = myCamera.getViewMatrix();
+    glUniformMatrix4fv(circleViewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(circleProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glLineWidth(2.0f);
+
+    glBindVertexArray(g_circleVAO);
+
+    for (int id : g_selectionSystem->GetSelectedIDs()) {
+        gps::SceneObject* obj = g_scene->GetObjectByID(id);
+        if (!obj || !obj->IsActive()) continue;
+        if (!obj->unitStats.isCombatUnit || obj->unitStats.attackRange <= 0.0f) continue;
+
+        glm::vec3 pos = obj->GetTransform().GetPosition();
+        pos.y += 2.0f; // lift slightly above water to avoid z-fighting
+        float range = obj->unitStats.attackRange;
+
+        glm::mat4 model = glm::scale(
+            glm::translate(glm::mat4(1.0f), pos),
+            glm::vec3(range, 1.0f, range)
+        );
+        glUniformMatrix4fv(circleModelLoc, 1, GL_FALSE, glm::value_ptr(model));
+
+        glm::vec4 color;
+        switch (obj->unitStats.faction) {
+            case 1:  color = glm::vec4(0.0f, 1.0f, 0.2f, 0.9f); break; // green  — player
+            case 2:  color = glm::vec4(1.0f, 0.2f, 0.0f, 0.9f); break; // red    — enemy
+            default: color = glm::vec4(1.0f, 1.0f, 1.0f, 0.9f); break; // white  — neutral
+        }
+        glUniform4fv(circleColorLoc, 1, glm::value_ptr(color));
+
+        glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+    }
+
+    glBindVertexArray(0);
+    glLineWidth(1.0f);
+    glDisable(GL_BLEND);
+}
+
+// ===========================
 // GAME LOOP
 // ===========================
 
@@ -941,6 +1034,7 @@ int main(int argc, const char* argv[]) {
     initShadowFrameBuffer();
     initModels();
     initShaders();
+    initRangeCircle();
     initUniforms();
     initSkyBox();
    // initTileManager();
@@ -1129,6 +1223,9 @@ int main(int argc, const char* argv[]) {
 
         // Render scene
         renderScene(myCustomShader);
+
+        // Render range circles for selected combat units
+        renderRangeCircles();
 
         // Render skybox
         renderSkyBox();

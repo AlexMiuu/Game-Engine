@@ -21,7 +21,7 @@ namespace gps {
 
     int CombatSystem::FindNearestEnemy(SceneObject* attacker) const {
         const UnitStats& atkStats = attacker->unitStats;
-        float bestDistSq = (float)atkStats.attackRange * (float)atkStats.attackRange;
+        float bestDistSq = atkStats.attackRange * atkStats.attackRange;
         int bestID = -1;
 
         for (const auto& obj : m_scene->GetObjects()) {
@@ -38,7 +38,7 @@ namespace gps {
 
             float distance = glm::distance(attacker->GetWorldCenter(), candidate->GetWorldCenter());
 
-            if (distance > (float)atkStats.attackRange) {
+            if (distance > atkStats.attackRange) {
                 continue; // out of range, skip
             }
 
@@ -104,7 +104,7 @@ namespace gps {
                     stats.targetID = -1;
                 } else {
                     float dist = glm::distance(attacker->GetWorldCenter(), target->GetWorldCenter());
-                    if (dist > (float)stats.attackRange)
+                    if (dist > stats.attackRange)
                         stats.targetID = -1;
                 }
             }

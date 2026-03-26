@@ -36,7 +36,7 @@ namespace gps {
         int maxHealth = 100;
         int health = 100;
         int attack = 10;
-        int attackRange = 5;
+        float attackRange = 5.0f;
         bool isCombatUnit = false;
         bool isAlive = true;
         bool isMovable = true;
