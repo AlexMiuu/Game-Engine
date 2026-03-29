@@ -200,11 +200,23 @@ namespace gps {
          */
         void ComputeAndSetBoundingSphere(SceneObject* obj, Model3D* model);
 
+        void SetPropPlacement(const std::string& modelName, const std::string& tag, const glm::vec3& scale, const std::string& label);
+
+        void CancelPropPlacement();
         /**
          * @brief Initializes unit stats based on the object's name tag
          * Call this after spawning any object.
          */
         UnitStats InitializeUnitsStats(SceneObject* object);
+
+
+    public:
+
+        std::string m_propPlacementModelName;
+        std::string m_propPlacementTag;
+        glm::vec3 m_propPlacementScale;
+        std::string m_propPlacementLabel;
+        bool m_propPlacementMode=false;
 
     private:
         // Scene reference
@@ -222,6 +234,9 @@ namespace gps {
         bool m_spawnEnabled;
         glm::vec3 m_troopSpawnPos;
         int m_troopCount;
+
+
+        
 
         // Helper methods
         void ComputeLocalBoundingSphere(Model3D* model, glm::vec3& outCenter, float& outRadius);

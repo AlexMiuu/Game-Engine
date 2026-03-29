@@ -18,6 +18,12 @@ namespace gps {
         , m_spawnEnabled(true)
         , m_troopSpawnPos(100.0f, -60.0f, -90.0f)
         , m_troopCount(0)
+		, m_propPlacementMode(false)
+		, m_propPlacementModelName("")
+		, m_propPlacementTag("")
+		, m_propPlacementScale(glm::vec3(1.0f))
+		, m_propPlacementLabel("")
+
     {
     }
 
@@ -145,6 +151,15 @@ namespace gps {
         return troops;
     }
 
+    void SceneManager::SetPropPlacement(const std::string& modelName,const std::string& tag, const glm::vec3& scale, const std::string& label){
+        m_propPlacementModelName = modelName;
+        m_propPlacementTag = tag;
+        m_propPlacementScale = scale;
+        m_propPlacementLabel = label;
+        m_propPlacementMode = true;
+        std::cout << "?? Prop placement mode enabled for model '" << modelName << "'" << std::endl;
+
+    }
     SceneObject* SceneManager::SpawnObject(
         const std::string& name,
         const std::string& tag,
@@ -264,6 +279,11 @@ namespace gps {
         std::cout << "? Created " << count << " initial troops" << std::endl;
     }
 
+    void SceneManager::CancelPropPlacement() {
+        if (!m_propPlacementMode) return;
+        m_propPlacementMode = false;
+        std::cout << "Placement cancelled" << std::endl;
+    }
 
     // ===========================
     // MODEL MANAGEMENT

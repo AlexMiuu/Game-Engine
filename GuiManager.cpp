@@ -30,7 +30,7 @@ namespace gps {
         , m_fpsHistoryIdx(0)
         , m_tileSize(256)
         , m_tileModelScale(27)
-        , heightTile(2.0f)
+        , heightTile(-60.0f)
     {
         memset(m_fpsHistory, 0, sizeof(m_fpsHistory));
     }
@@ -95,6 +95,7 @@ namespace gps {
         m_fpsHistoryIdx = (m_fpsHistoryIdx + 1) % 120;
 
         RenderTopBar();
+        RenderSpawnPanel();
         RenderCommandPanel();
         RenderUnitInfoPanel();
 
@@ -175,6 +176,43 @@ namespace gps {
         ImGui::PopStyleVar();
     }
 
+    void GuiManager::RenderSpawnPanel(){
+        ImGuiViewport* viewport = ImGui::GetMainViewport();
+
+        float panelWidth = 280.0f;
+        float panelHeight = 620.0f;
+        float margin = 10.0f;
+        
+        ImGui::SetNextWindowPos(ImVec2(10, 45), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(280, 400), ImGuiCond_FirstUseEver);
+
+
+        ImGui::Begin("Spawn Units", nullptr);
+        
+        ImGui::SeparatorText("Combat Units");
+
+            if (ColoredButton("Spawn Frigate", ImVec2(-1, 40),
+                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("ship","ship", glm::vec3(4.5f), "Ship");
+                }
+            }
+
+        ImGui::SeparatorText("Resource Units");
+
+                 if (ColoredButton("Oil Rig", ImVec2(-1, 40),
+                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("oilRig","oilRig", glm::vec3(2.5f), "OilRig");
+                }
+            }
+
+
+
+        ImGui::End();
+    }
     // ===========================
     // COMMAND PANEL — jos-dreapta, butoane de actiune
     // ===========================

@@ -404,6 +404,7 @@ namespace gps {
         obj->GetTransform().SetPosition(tile.worldPos);
         obj->GetTransform().SetScale(m_tileModelScale);
         obj->GetTransform().SetHeight(heightTile);
+        obj->SetTag("tile");
         obj->unitStats.faction= -1;
         obj->unitStats.isAlive = false;
         // Calculeaza bounding sphere

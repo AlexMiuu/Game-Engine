@@ -63,7 +63,7 @@ namespace gps {
         void RenderCommandPanel();
         void RenderUnitInfoPanel();
         void RenderDebugPanel();
-
+        void RenderSpawnPanel();
         // Button system
         void AddButton(const GuiButton& button);
         void ClearButtons();

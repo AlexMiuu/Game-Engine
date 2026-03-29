@@ -368,13 +368,17 @@ namespace gps {
         if (!obj.IsActive()) return false;
 
         std::string name = obj.GetName();
+        std::string tag = obj.GetTag();
 
         // Selectează trupe, orci, etc. (dar NU terenul, zidurile)
         return (name.find("Troop") != std::string::npos ||
             name.find("Orc") != std::string::npos ||
             name.find("Pikeman") != std::string::npos ||
             name.find("Ship") != std::string::npos) ||
-            name.find("OilRig") != std::string::npos;
+            name.find("OilRig") != std::string::npos ||
+            tag.find("ship") != std::string::npos ||
+            tag.find("oilRig") != std::string::npos ||
+            tag.find("enemyShip") != std::string::npos;
     }
 
     bool SelectionSystem::IsObjectInSelectionBox(const SceneObject& obj,

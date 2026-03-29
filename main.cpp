@@ -158,35 +158,14 @@ gps::SceneManager* g_sceneManager = nullptr;
 gps::SelectionSystem* g_selectionSystem = nullptr;
 gps::CollisionSystem* g_collisionSystem = nullptr;
 gps::CombatSystem*   g_combatSystem    = nullptr;
-
+gps::ResourceManager& resourceManager = gps::ResourceManager::Instance();
 gps::GuiManager* g_guiManager = nullptr;
 
 // ===========================
 // PROP PLACEMENT MODE (MVP)
 // ===========================
-bool g_propPlacementMode = false;
-std::string g_propModelToPlace = "ship";
-glm::vec3 g_propScaleToPlace = glm::vec3(5.5f);
-std::string g_propLabelToPlace = "Ship";
-std::string g_propTagToPlace = "ship";
 int g_nextPlacedPropID = 10001;
 
-void ArmPropPlacement(const std::string& modelName,const std::string& tag, const glm::vec3& scale, const std::string& label) {
-    g_propPlacementMode = true;
-    g_propModelToPlace = modelName;
-    g_propScaleToPlace = scale;
-    g_propLabelToPlace = label;
-	g_propTagToPlace = tag;
-
-    std::cout << "🧱 Placement armed for " << g_propLabelToPlace
-        << ". Left click on terrain to place. Right click to cancel." << std::endl;
-}
-
-void CancelPropPlacement() {
-    if (!g_propPlacementMode) return;
-    g_propPlacementMode = false;
-    std::cout << "❌ Placement cancelled" << std::endl;
-}
 
 // ===========================
 // TIME
@@ -286,31 +265,34 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     glm::vec2 mousePos = gps::InputManager::Instance().GetMousePosition();
 
     // Placement mode: left click places selected prop and skips selection box logic.
-    if (g_propPlacementMode && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        if (g_sceneManager) {
+    std::cout << g_sceneManager->m_propPlacementMode << "AAAAAAAAAAAAAA"<< '\n';
+    if (g_sceneManager->m_propPlacementMode && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        if (g_sceneManager && resourceManager.Get("Oil") >= 50) { 
             glm::vec3 worldPos = screenToWorld(mousePos);
 
+            resourceManager.Spend("Oil", 50);
+            
             glm::vec3 gridMin, gridMax;
             if (g_tileManager.GetGridBounds(gridMin, gridMax)) {
                 worldPos.x = glm::clamp(worldPos.x, gridMin.x, gridMax.x);
                 worldPos.z = glm::clamp(worldPos.z, gridMin.z, gridMax.z);
             }
 
-            std::string objectName = "Prop_" + g_propLabelToPlace + "_" + std::to_string(g_nextPlacedPropID++);
+            std::string objectName = "Prop_" + g_sceneManager->m_propPlacementTag + "_" + std::to_string(g_nextPlacedPropID++);
             gps::SceneObject* spawned = g_sceneManager->SpawnObject(
                 objectName,
-				g_propTagToPlace,
-                g_propModelToPlace,
+				g_sceneManager->m_propPlacementTag,
+                g_sceneManager->m_propPlacementModelName,
                 worldPos,
-                g_propScaleToPlace
+                g_sceneManager->m_propPlacementScale
             );
 
             if (spawned) {
-                std::cout << "✅ Placed " << g_propLabelToPlace << " at ("
+                std::cout << "✅ Placed " << g_sceneManager->m_propPlacementLabel << " at ("
                     << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
             }
             else {
-                std::cout << "❌ Failed to place " << g_propLabelToPlace
+				std::cout << "❌ Failed to place " << g_sceneManager->m_propPlacementLabel
                     << " (model not registered or invalid state)" << std::endl;
             }
         }
@@ -322,12 +304,14 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         if (action == GLFW_PRESS) {
 
 			int hitID = g_selectionSystem->GetObjectAtPoint(*g_scene, myCamera, projection, mousePos);
+            gps::SceneObject* prop = g_scene->GetObjectByID(hitID);
+
             if (hitID != -1 && g_selectionSystem->HasSelection() && !g_selectionSystem->IsSelected(hitID)) {
                 gps::SceneObject* target = g_scene->GetObjectByID(hitID);
                 if (target && target->unitStats.isAlive)
                 {
                     // Determine attacker faction from first selected unit
-                    int atkFaction = 0; 
+                    int atkFaction = 0;
                     const auto& selIDs = g_selectionSystem->GetSelectedIDs();
                     if (!selIDs.empty()) {
                         const int firstSelectedID = *selIDs.begin();
@@ -341,10 +325,19 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                             gps::SceneObject* attacker = g_scene->GetObjectByID(selfID);
                             if (attacker) attacker->unitStats.targetID = hitID;
                         }
+                        return; // Inamicul a fost tanat - pastreaza selectia curenta
                     }
                 }
-                return;
+                std::cout << "Clicked on object ID " << hitID << " - "<< '\n';
+                if (prop && prop->GetTag() == "tile")
+                {
+                    std::cout << "Deselected all" << " - " << '\n';
+                    g_selectionSystem->ClearSelection();
+                    return;
+                }
+                // Unitate prietenoasa/neutra - lasa selectia normala sa continue
             }
+            
             g_selectionSystem->StartBoxSelection(mousePos);
         }
         else if (action == GLFW_RELEASE) {
@@ -356,8 +349,8 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     }
 
     // RIGHT MOUSE - Cancel placement mode
-    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS && g_propPlacementMode) {
-        CancelPropPlacement();
+    if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS && g_sceneManager->m_propPlacementMode) {
+        g_sceneManager->CancelPropPlacement();
         return;
     }
 
@@ -453,11 +446,13 @@ void initGui() {
 
 
     // Buttons: arm click-to-place prop mode
+    /*
     gps::GuiButton placeShipBtn;
     placeShipBtn.label = "Spawn Ship";
     placeShipBtn.tooltip = "Pune o nava pe harta, click stanga pe harta pentru spawn.";
     placeShipBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
     placeShipBtn.callback = [&]() {
+
         ArmPropPlacement("ship","ship", glm::vec3(4.5f), "Ship");
         };
     g_guiManager->AddButton(placeShipBtn);
@@ -479,7 +474,7 @@ void initGui() {
         ArmPropPlacement("oilRig","oilRig", glm::vec3(2.5f), "OilRig");
         };
     g_guiManager->AddButton(placeOilRigBtn);
-
+    */
     // Buton: Toggle Spawn
     gps::GuiButton toggleSpawnBtn;
     toggleSpawnBtn.label = "🔄 Toggle Spawn";
@@ -492,8 +487,6 @@ void initGui() {
     g_guiManager->AddButton(toggleSpawnBtn);
 
     std::cout << "✅ GUI initialized" << std::endl;
-
-
 }
 
 // ===========================
@@ -867,7 +860,7 @@ void processMovement() {
 
     // Quick cancel for placement mode without exiting app
     if (input.IsKeyJustPressed(GLFW_KEY_X)) {
-        CancelPropPlacement();
+        g_sceneManager->CancelPropPlacement();
     }
 }
 
@@ -915,8 +908,8 @@ void renderScene(gps::Shader shader) {
     }
 
     // Ghost placement preview
-    if (g_propPlacementMode && g_sceneManager) {
-        gps::Model3D* ghostModel = g_sceneManager->GetModel(g_propModelToPlace);
+    if (g_sceneManager->m_propPlacementMode && g_sceneManager) {
+        gps::Model3D* ghostModel = g_sceneManager->GetModel(g_sceneManager->m_propPlacementModelName);
         if (ghostModel) {
             glm::vec2 mousePos = gps::InputManager::Instance().GetMousePosition();
             glm::vec3 ghostPos = screenToWorld(mousePos);
@@ -929,7 +922,7 @@ void renderScene(gps::Shader shader) {
 
             glm::mat4 ghostMatrix = glm::scale(
                 glm::translate(glm::mat4(1.0f), ghostPos),
-                g_propScaleToPlace);
+                g_sceneManager->m_propPlacementScale);
             glm::mat3 ghostNormal = glm::mat3(glm::transpose(glm::inverse(view * ghostMatrix)));
 
             glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(ghostMatrix));
