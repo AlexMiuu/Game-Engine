@@ -117,7 +117,7 @@ namespace gps {
             if (stats.targetID != -1 && stats.attackCooldown <= 0.0f) {
                 SceneObject* target = m_scene->GetObjectByID(stats.targetID);
                 if (target) {
-                    bool isShip = (attacker->GetTag() == "ship");
+                    bool isShip = (attacker->GetTag() == "ship"||attacker->GetTag() == "frigate"||attacker->GetTag() == "destroyer");
                     if (isShip) {
                         float dist = glm::distance(attacker->GetWorldCenter(), target->GetWorldCenter());
                         pendingShots.push_back({ attacker, target, dist / 80.0 });

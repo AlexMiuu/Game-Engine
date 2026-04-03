@@ -7,6 +7,8 @@
 #include <iostream>
 #include <cmath>
 #include <limits>
+#include <algorithm>
+#include <random>
 
 namespace gps {
 
@@ -61,7 +63,9 @@ namespace gps {
         // Creeaz� componentele scenei
        // CreateTerrain();
        // CreateStaticObjects();
+        CreateRandomObstacles(100);
         CreateInitialTroops(5);
+        
 
         std::cout << "? Scene setup complete! Objects in scene: "
             << m_scene->GetObjectCount() << std::endl;
@@ -338,6 +342,53 @@ namespace gps {
         outRadius = glm::length(maxPos - minPos) * 0.5f;
     }
 
+    void SceneManager::CreateRandomObstacles(int count) {
+
+        Model3D* islandT = GetModel("islandT");
+
+        std::vector<Tile*> allTiles = m_tileManager->GetAllTiles();
+
+
+        std::mt19937 rng(std::random_device{}());
+        std::shuffle(allTiles.begin(), allTiles.end(), rng);
+
+        float tileSize = m_tileManager->GetTileSize();
+        float islandY = static_cast<float>(m_tileManager->GetTileHeight());
+        float minDist = tileSize * 5.5f;   // half a tile apart minimum
+
+        std::uniform_real_distribution<float> offsetDist(-tileSize * 0.25f, tileSize * 0.25f);
+        std::vector<glm::vec3> placedPositions;
+        int spawned = 0;
+
+        for (Tile* tile : allTiles) 
+        {
+            if (spawned >= count) break;
+
+            glm::vec3 pos = tile->worldPos;
+            pos.y = islandY;
+            pos.x += offsetDist(rng);
+            pos.z += offsetDist(rng);
+
+            // Minimum distance check against already-placed islands
+            bool tooClose = false;
+            for (const auto& placed : placedPositions) {
+                if (glm::length(glm::vec2(pos.x - placed.x, pos.z - placed.z)) < minDist) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            if (tooClose) continue;
+
+            std::string name = "Island_" + std::to_string(spawned);
+            SpawnObject(name, "islandT", "islandT", pos, glm::vec3(4.0f));
+            placedPositions.push_back(pos);
+            spawned++;
+            
+        }
+        std::cout << "Spawned " << spawned << " random islands" << std::endl;
+    }
+
+
 
 	UnitStats SceneManager::InitializeUnitsStats(SceneObject* object) {
 		
@@ -347,9 +398,9 @@ namespace gps {
         if (tag == "ship")
         {
             stats.health = 100;
-            stats.attack = 40;
+            stats.attack = 20;
             stats.maxHealth = 100;
-            stats.attackRange = 55.0f;
+            stats.attackRange = 85.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = true;
@@ -378,7 +429,28 @@ namespace gps {
             stats.productionRate = 5.0f;
             stats.isMovable = false;
         }
-
+        else if (tag == "frigate")
+        {
+            stats.health = 250;
+            stats.attack = 50;
+            stats.maxHealth = 250;
+            stats.attackRange = 105.0f;
+            stats.isCombatUnit = true;
+            stats.isAlive = true;
+            stats.isMovable = true;
+            stats.faction = 1;
+		}
+        else if (tag == "destroyer")
+        {
+            stats.health = 1000;
+            stats.attack = 100;
+            stats.maxHealth = 1000;
+            stats.attackRange = 55.0f;
+            stats.isCombatUnit = true;
+            stats.isAlive = true;
+            stats.isMovable = true;
+            stats.faction = 1;
+        }
         return stats;
 	}
 

@@ -191,14 +191,35 @@ namespace gps {
         
         ImGui::SeparatorText("Combat Units");
 
-            if (ColoredButton("Spawn Frigate", ImVec2(-1, 40),
+            if (ColoredButton("Spawn Ship", ImVec2(-1, 40),
                 ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
             {
                 if (m_sceneManager) {
                     m_sceneManager->SetPropPlacement("ship","ship", glm::vec3(4.5f), "Ship");
                 }
             }
+            if (ColoredButton("Spawn Frigate", ImVec2(-1, 40),
+                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("frigate", "frigate", glm::vec3(4.5f), "Frigate");
+                }
+            }
+            if (ColoredButton("Spawn Destroyer", ImVec2(-1, 40),
+                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("destroyer", "destroyer", glm::vec3(4.5f), "destroyer");
+                }
+            }
 
+            if (ColoredButton("Spawn Enemy Frigate", ImVec2(-1, 40),
+                ImVec4(0.7f, 0.1f, 0.1f, 1.0f), ImVec4(0.7f, 0.1f, 0.1f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("ship", "enemyShip", glm::vec3(4.5f), "EnemyShip");
+                }
+            }
         ImGui::SeparatorText("Resource Units");
 
                  if (ColoredButton("Oil Rig", ImVec2(-1, 40),

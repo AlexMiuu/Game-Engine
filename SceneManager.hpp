@@ -209,6 +209,8 @@ namespace gps {
          */
         UnitStats InitializeUnitsStats(SceneObject* object);
 
+        void CreateRandomObstacles(int count);
+        
 
     public:
 

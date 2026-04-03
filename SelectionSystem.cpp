@@ -378,7 +378,9 @@ namespace gps {
             name.find("OilRig") != std::string::npos ||
             tag.find("ship") != std::string::npos ||
             tag.find("oilRig") != std::string::npos ||
-            tag.find("enemyShip") != std::string::npos;
+            tag.find("enemyShip") != std::string::npos ||
+            tag.find("frigate") != std::string::npos ||
+            tag.find("destroyer") != std::string::npos;
     }
 
     bool SelectionSystem::IsObjectInSelectionBox(const SceneObject& obj,

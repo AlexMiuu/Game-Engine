@@ -130,6 +130,9 @@ gps::Model3D Pikeman;
 gps::Model3D waterTyle;
 gps::Model3D shipModel;
 gps::Model3D oilRigModel;
+gps::Model3D frigate;
+gps::Model3D destroyer;
+gps::Model3D islandT;
 
 
 // ===========================
@@ -445,36 +448,8 @@ void initGui() {
     // ─── Adauga butoane custom (optional) ───
 
 
-    // Buttons: arm click-to-place prop mode
+ 
     /*
-    gps::GuiButton placeShipBtn;
-    placeShipBtn.label = "Spawn Ship";
-    placeShipBtn.tooltip = "Pune o nava pe harta, click stanga pe harta pentru spawn.";
-    placeShipBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
-    placeShipBtn.callback = [&]() {
-
-        ArmPropPlacement("ship","ship", glm::vec3(4.5f), "Ship");
-        };
-    g_guiManager->AddButton(placeShipBtn);
-
-    gps::GuiButton placeEnemyShipBtn;
-    placeEnemyShipBtn.label = "Spawn Enemy Ship";
-    placeEnemyShipBtn.tooltip = "Pune o nava inamica pe harta.";
-    placeEnemyShipBtn.color = glm::vec4(0.7f, 0.1f, 0.1f, 1.0f);
-    placeEnemyShipBtn.callback = [&]() {
-        ArmPropPlacement("ship", "enemyShip", glm::vec3(4.5f), "EnemyShip");
-        };
-    g_guiManager->AddButton(placeEnemyShipBtn);
-
-    gps::GuiButton placeOilRigBtn;
-    placeOilRigBtn.label = "Spawn Oil Rig";
-    placeOilRigBtn.tooltip = "Pune un rig de ulei pe harta, click stanga pe harta pentru spawn.";
-    placeOilRigBtn.color = glm::vec4(0.45f, 0.20f, 0.20f, 1.0f);
-    placeOilRigBtn.callback = [&]() {
-        ArmPropPlacement("oilRig","oilRig", glm::vec3(2.5f), "OilRig");
-        };
-    g_guiManager->AddButton(placeOilRigBtn);
-    */
     // Buton: Toggle Spawn
     gps::GuiButton toggleSpawnBtn;
     toggleSpawnBtn.label = "🔄 Toggle Spawn";
@@ -485,7 +460,7 @@ void initGui() {
         std::cout << "Spawn " << (!current ? "ENABLED" : "DISABLED") << std::endl;
         };
     g_guiManager->AddButton(toggleSpawnBtn);
-
+    */
     std::cout << "✅ GUI initialized" << std::endl;
 }
 
@@ -580,6 +555,9 @@ void initModels() {
     waterTyle.LoadModel("objects/water/water.obj","textures/");
     shipModel.LoadModel("objects/ships/Battleship.obj","textures/");
     oilRigModel.LoadModel("objects/oilRig/oilRig.obj", "textures/");
+	frigate.LoadModel("objects/frigate/Frigate.obj", "textures/");
+    destroyer.LoadModel("objects/destroyer/Destroyer.obj", "textures/");
+    islandT.LoadModel("objects/islandT/islandT.obj","textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -678,10 +656,13 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("water",&waterTyle);
     g_sceneManager->RegisterModel("ship",&shipModel);
     g_sceneManager->RegisterModel("oilRig", &oilRigModel);
+	g_sceneManager->RegisterModel("frigate", &frigate);
+	g_sceneManager->RegisterModel("destroyer", &destroyer); 
+    g_sceneManager->RegisterModel("islandT", &islandT);
 
     g_tileManager.Initialize(&waterTyle, g_scene);
     // Generate initial 3x3 tile grid centered at origin
-    g_tileManager.GenerateAndLoadGrid(-1, 1, -1, 1);
+    g_tileManager.GenerateAndLoadGrid(-2, 1, -1, 2);
 
     // 4. Setup scena
     g_sceneManager->SetupScene();
