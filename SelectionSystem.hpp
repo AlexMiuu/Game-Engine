@@ -237,6 +237,8 @@ namespace gps {
 
         int GetObjectAtPoint(Scene& scene, const Camera& camera,const glm::mat4& projection,const glm::vec2& screenPos) const;
 
+        void SetEditModeSelection(bool enabled) { m_editModeSelection = enabled; }
+        
     private:
         // ===========================
         // STATE
@@ -265,7 +267,7 @@ namespace gps {
         float m_minBoxSize;
 
         bool m_initialized;
-
+        bool m_editModeSelection =false;
         // ===========================
         // INTERNAL HELPERS
         // ===========================

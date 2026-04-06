@@ -4,6 +4,7 @@
 //
 
 #include "GuiManager.hpp"
+#include "EditorState.hpp"
 #include "Scene.hpp"
 #include "SceneManager.hpp"
 #include "SelectionSystem.hpp"
@@ -23,6 +24,7 @@ namespace gps {
         , m_sceneManager(nullptr)
         , m_selectionSystem(nullptr)
         , m_tileManager(nullptr)
+        , m_editorState(nullptr)
         , m_tileGridSize(5)
         , m_cameraPos(0.0f)
         , m_deltaTime(0.016f)
@@ -95,9 +97,14 @@ namespace gps {
         m_fpsHistoryIdx = (m_fpsHistoryIdx + 1) % 120;
 
         RenderTopBar();
-        RenderSpawnPanel();
-        RenderCommandPanel();
-        RenderUnitInfoPanel();
+
+        if (m_editorState && m_editorState->IsEditMode()) {
+            RenderInspectorPanel();
+        } else {
+            RenderSpawnPanel();
+            RenderCommandPanel();
+            RenderUnitInfoPanel();
+        }
 
         if (m_showDebugPanel) RenderDebugPanel();
     }
@@ -124,6 +131,26 @@ namespace gps {
         ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.05f, 0.05f, 0.08f, 0.92f));
 
         ImGui::Begin("##TopBar", nullptr, flags);
+
+        // Mode toggle button
+        if (m_editorState) {
+            bool isEdit = m_editorState->IsEditMode();
+            ImVec4 modeColor = isEdit
+                ? ImVec4(0.2f, 0.5f, 1.0f, 1.0f)
+                : ImVec4(0.2f, 0.7f, 0.2f, 1.0f);
+            ImGui::PushStyleColor(ImGuiCol_Button, modeColor);
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered,
+                ImVec4(modeColor.x * 1.2f, modeColor.y * 1.2f, modeColor.z * 1.2f, 1.0f));
+            if (ImGui::SmallButton(isEdit ? "EDIT MODE [F5]" : "PLAY MODE [F5]")) {
+                m_editorState->ToggleMode();
+                if (m_selectionSystem) {
+                    m_selectionSystem->SetEditModeSelection(m_editorState->IsEditMode());
+                    m_selectionSystem->ClearSelection();
+                }
+            }
+            ImGui::PopStyleColor(2);
+            ImGui::SameLine(0, 20);
+        }
 
         // FPS
         float fps = (m_deltaTime > 0.0f) ? (1.0f / m_deltaTime) : 0.0f;
@@ -234,6 +261,91 @@ namespace gps {
 
         ImGui::End();
     }
+    // ===========================
+    // INSPECTOR PANEL — Edit Mode
+    // ===========================
+
+    void GuiManager::RenderInspectorPanel() {
+        if (!m_editorState || !m_editorState->IsEditMode()) return;
+        if (!m_scene) return;
+
+        ImGui::SetNextWindowPos(ImVec2(10, 45), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(320, 420), ImGuiCond_FirstUseEver);
+
+        ImGui::Begin("Inspector", nullptr);
+
+        // Tool selector
+        ImGui::SeparatorText("Tool");
+        EditTool currentTool = m_editorState->GetActiveTool();
+        if (ImGui::RadioButton("Translate (G)", currentTool == EditTool::Translate))
+            m_editorState->SetActiveTool(EditTool::Translate);
+        ImGui::SameLine();
+        if (ImGui::RadioButton("Scale (R)", currentTool == EditTool::Scale))
+            m_editorState->SetActiveTool(EditTool::Scale);
+
+        ImGui::Spacing();
+
+        if (!m_selectionSystem || !m_selectionSystem->HasSelection()) {
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No object selected.");
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click an object to select it.");
+            ImGui::End();
+            return;
+        }
+
+        const auto& selectedIDs = m_selectionSystem->GetSelectedIDs();
+
+        if (selectedIDs.size() == 1) {
+            int id = *selectedIDs.begin();
+            SceneObject* obj = m_scene->GetObjectByID(id);
+            if (!obj) { ImGui::End(); return; }
+
+            // Object info
+            ImGui::SeparatorText("Object");
+            ImGui::Text("Name: %s", obj->GetName().c_str());
+            ImGui::Text("ID: %d  |  Tag: %s", obj->GetID(), obj->GetTag());
+
+            // Transform - Position
+            ImGui::SeparatorText("Position");
+            glm::vec3 pos = obj->GetTransform().GetPosition();
+            if (ImGui::DragFloat3("##Pos", &pos.x, 1.0f)) {
+                obj->GetTransform().SetPosition(pos);
+                obj->UpdateWorldBounds();
+            }
+
+            // Transform - Rotation
+            ImGui::SeparatorText("Rotation");
+            glm::vec3 rot = obj->GetTransform().GetRotation();
+            if (ImGui::DragFloat3("##Rot", &rot.x, 1.0f, -360.0f, 360.0f)) {
+                obj->GetTransform().SetRotation(rot);
+                obj->UpdateWorldBounds();
+            }
+
+            // Transform - Scale
+            ImGui::SeparatorText("Scale");
+            glm::vec3 scl = obj->GetTransform().GetScale();
+            if (ImGui::DragFloat3("##Scl", &scl.x, 0.1f, 0.01f, 100.0f)) {
+                obj->GetTransform().SetScale(scl);
+                obj->UpdateWorldBounds();
+            }
+
+            // Uniform scale
+            ImGui::Spacing();
+            float uniScale = scl.x;
+            if (ImGui::SliderFloat("Uniform Scale", &uniScale, 0.1f, 50.0f)) {
+                obj->GetTransform().SetScale(uniScale);
+                obj->UpdateWorldBounds();
+            }
+        }
+        else {
+            ImGui::SeparatorText("Multiple Selection");
+            ImGui::Text("%zu objects selected", selectedIDs.size());
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
+                "Select a single object to edit its transform.");
+        }
+
+        ImGui::End();
+    }
+
     // ===========================
     // COMMAND PANEL — jos-dreapta, butoane de actiune
     // ===========================

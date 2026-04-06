@@ -22,6 +22,7 @@ namespace gps {
         , m_highlightEnabled(true)
         , m_minBoxSize(5.0f)  // 5 pixeli minim
         , m_initialized(false)
+        , m_editModeSelection(false)
     {
     }
 
@@ -365,6 +366,11 @@ namespace gps {
 
     bool SelectionSystem::IsSelectable(const SceneObject& obj) const {
         // Selectează doar obiecte active cu anumite nume
+
+        if(m_editModeSelection) {
+             return obj.IsActive();
+        }
+        
         if (!obj.IsActive()) return false;
 
         std::string name = obj.GetName();

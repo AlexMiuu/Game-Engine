@@ -32,6 +32,7 @@ namespace gps {
     class SceneManager;
     class SelectionSystem;
     class TileManager;
+    class EditorState;
 
     struct GuiButton {
         std::string label;
@@ -64,6 +65,11 @@ namespace gps {
         void RenderUnitInfoPanel();
         void RenderDebugPanel();
         void RenderSpawnPanel();
+        void RenderInspectorPanel();
+
+        // Editor state
+        void BindEditorState(EditorState* editorState) { m_editorState = editorState; }
+
         // Button system
         void AddButton(const GuiButton& button);
         void ClearButtons();
@@ -104,6 +110,7 @@ namespace gps {
         SceneManager* m_sceneManager;
         SelectionSystem* m_selectionSystem;
         TileManager* m_tileManager;
+        EditorState* m_editorState;
 
         // Tile spawn config
         int m_tileGridSize;

@@ -44,7 +44,7 @@
 #include "GuiManager.hpp"
 #include "CombatSystem.hpp"
 #include "ResourceManager.hpp"
-
+#include "EditorState.hpp"
 // ===========================
 // WINDOW SETTINGS
 // ===========================
@@ -163,6 +163,7 @@ gps::CollisionSystem* g_collisionSystem = nullptr;
 gps::CombatSystem*   g_combatSystem    = nullptr;
 gps::ResourceManager& resourceManager = gps::ResourceManager::Instance();
 gps::GuiManager* g_guiManager = nullptr;
+gps::EditorState* g_editorState = nullptr;
 
 // ===========================
 // PROP PLACEMENT MODE (MVP)
@@ -267,14 +268,47 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
     glm::vec2 mousePos = gps::InputManager::Instance().GetMousePosition();
 
+    // ========== EDIT MODE INPUT ==========
+    if (g_editorState && g_editorState->IsEditMode()) {
+        if (button == GLFW_MOUSE_BUTTON_LEFT) {
+            if (action == GLFW_PRESS) {
+                int hitID = g_selectionSystem->GetObjectAtPoint(*g_scene, myCamera, projection, mousePos);
+
+                if (hitID >= 0 && g_selectionSystem->IsSelected(hitID)) {
+                    // Start dragging the already-selected object
+                    gps::SceneObject* obj = g_scene->GetObjectByID(hitID);
+                    if (obj) {
+                        glm::vec3 worldPos = screenToWorld(mousePos);
+                        g_editorState->StartDrag(hitID, obj->GetTransform().GetPosition(), worldPos);
+                    }
+                } else {
+                    // Not on a selected object -> do normal selection
+                    g_selectionSystem->StartBoxSelection(mousePos);
+                }
+            }
+            else if (action == GLFW_RELEASE) {
+                if (g_editorState->IsDragging()) {
+                    g_editorState->EndDrag();
+                } else {
+                    bool shiftHeld = gps::InputManager::Instance().IsKeyPressed(GLFW_KEY_LEFT_SHIFT) ||
+                        gps::InputManager::Instance().IsKeyPressed(GLFW_KEY_RIGHT_SHIFT);
+                    g_selectionSystem->EndBoxSelection(*g_scene, myCamera, projection, shiftHeld);
+                }
+            }
+        }
+        // In edit mode, right-click does nothing (no movement commands)
+        return;
+    }
+
+    // ========== PLAY MODE INPUT (existing code) ==========
+
     // Placement mode: left click places selected prop and skips selection box logic.
-    std::cout << g_sceneManager->m_propPlacementMode << "AAAAAAAAAAAAAA"<< '\n';
     if (g_sceneManager->m_propPlacementMode && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        if (g_sceneManager && resourceManager.Get("Oil") >= 50) { 
+        if (g_sceneManager && resourceManager.Get("Oil") >= 50) {
             glm::vec3 worldPos = screenToWorld(mousePos);
 
             resourceManager.Spend("Oil", 50);
-            
+
             glm::vec3 gridMin, gridMax;
             if (g_tileManager.GetGridBounds(gridMin, gridMax)) {
                 worldPos.x = glm::clamp(worldPos.x, gridMin.x, gridMax.x);
@@ -291,12 +325,8 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             );
 
             if (spawned) {
-                std::cout << "✅ Placed " << g_sceneManager->m_propPlacementLabel << " at ("
+                std::cout << "Placed " << g_sceneManager->m_propPlacementLabel << " at ("
                     << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
-            }
-            else {
-				std::cout << "❌ Failed to place " << g_sceneManager->m_propPlacementLabel
-                    << " (model not registered or invalid state)" << std::endl;
             }
         }
         return;
@@ -313,7 +343,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                 gps::SceneObject* target = g_scene->GetObjectByID(hitID);
                 if (target && target->unitStats.isAlive)
                 {
-                    // Determine attacker faction from first selected unit
                     int atkFaction = 0;
                     const auto& selIDs = g_selectionSystem->GetSelectedIDs();
                     if (!selIDs.empty()) {
@@ -328,19 +357,16 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                             gps::SceneObject* attacker = g_scene->GetObjectByID(selfID);
                             if (attacker) attacker->unitStats.targetID = hitID;
                         }
-                        return; // Inamicul a fost tanat - pastreaza selectia curenta
+                        return;
                     }
                 }
-                std::cout << "Clicked on object ID " << hitID << " - "<< '\n';
                 if (prop && prop->GetTag() == "tile")
                 {
-                    std::cout << "Deselected all" << " - " << '\n';
                     g_selectionSystem->ClearSelection();
                     return;
                 }
-                // Unitate prietenoasa/neutra - lasa selectia normala sa continue
             }
-            
+
             g_selectionSystem->StartBoxSelection(mousePos);
         }
         else if (action == GLFW_RELEASE) {
@@ -364,11 +390,9 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         const auto& selectedIDs = g_selectionSystem->GetSelectedIDs();
         if (selectedIDs.empty()) return;
 
-        // Get tile grid bounds for clamping
         glm::vec3 gridMin, gridMax;
         bool hasGrid = g_tileManager.GetGridBounds(gridMin, gridMax);
 
-        // Calculează formație
         int numSelected = selectedIDs.size();
         int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(numSelected))));
         float spacing = 15.0f;
@@ -377,7 +401,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         for (int troopID : selectedIDs) {
             gps::SceneObject* obj = g_scene->GetObjectByID(troopID);
             if (!obj) continue;
-            if (!obj->unitStats.isMovable) continue; 
+            if (!obj->unitStats.isMovable) continue;
             int row = idx / columns;
             int col = idx % columns;
             float offsetX = (col - columns / 2.0f) * spacing;
@@ -385,13 +409,11 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
             glm::vec3 formationPos = worldPos + glm::vec3(offsetX, 0.0f, offsetZ);
 
-            // Clamp destination to tile grid bounds
             if (hasGrid) {
                 formationPos.x = glm::clamp(formationPos.x, gridMin.x, gridMax.x);
                 formationPos.z = glm::clamp(formationPos.z, gridMin.z, gridMax.z);
             }
 
-            // Setează movement
             glm::vec3 startPos = obj->GetTransform().GetPosition();
             glm::vec3 moveDir = formationPos - startPos;
             moveDir.y = 0.0f;
@@ -409,13 +431,27 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
             idx++;
         }
-
-        std::cout << "📍 Moving " << selectedIDs.size() << " troops to target" << std::endl;
     }
 }
 
 void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
     gps::InputManager::Instance().OnMouseMove(xpos, ypos);
+
+    // Edit mode drag
+    if (g_editorState && g_editorState->IsEditMode() && g_editorState->IsDragging()) {
+        glm::vec3 currentWorldPos = screenToWorld(glm::vec2(xpos, ypos));
+
+        int draggedID = g_editorState->GetDraggedObjectID();
+        gps::SceneObject* obj = g_scene->GetObjectByID(draggedID);
+        if (obj) {
+            glm::vec3 offset = g_editorState->GetDragOffset();
+            glm::vec3 newPos = currentWorldPos + offset;
+            newPos.y = obj->GetTransform().GetPosition().y; // Keep Y unchanged
+            obj->GetTransform().SetPosition(newPos);
+            obj->UpdateWorldBounds();
+        }
+        return;
+    }
 
     // Update box selection dacă e activă
     if (g_selectionSystem && g_selectionSystem->IsBoxSelecting()) {
@@ -843,6 +879,34 @@ void processMovement() {
     if (input.IsKeyJustPressed(GLFW_KEY_X)) {
         g_sceneManager->CancelPropPlacement();
     }
+
+    if (input.IsKeyJustPressed(GLFW_KEY_F5)) {
+        g_editorState->ToggleMode();
+        g_selectionSystem->SetEditModeSelection(g_editorState->IsEditMode());
+        g_selectionSystem->ClearSelection();
+
+        if (g_editorState->IsEditMode()) {
+            g_combatSystem->SetEnabled(false);
+            // Stop all movement
+            for (const auto& objPtr : g_scene->GetObjects()) {
+                objPtr->movement.isMoving = false;
+            }
+            std::cout << "EDIT MODE enabled" << std::endl;
+        } else {
+            g_combatSystem->SetEnabled(true);
+            std::cout << "PLAY MODE enabled" << std::endl;
+        }
+    }
+
+    // Edit mode tool hotkeys
+    if (g_editorState && g_editorState->IsEditMode()) {
+        if (input.IsKeyJustPressed(GLFW_KEY_G)) {
+            g_editorState->SetActiveTool(gps::EditTool::Translate);
+        }
+        if (input.IsKeyJustPressed(GLFW_KEY_R)) {
+            g_editorState->SetActiveTool(gps::EditTool::Scale);
+        }
+    }
 }
 
 void updateDeltaTime() {
@@ -882,7 +946,10 @@ void renderScene(gps::Shader shader) {
         if (isSelectedLoc != -1 && highlightColorLoc != -1) {
             int isSelected = g_selectionSystem->IsSelected(obj->GetID()) ? 1 : 0;
             glUniform1i(isSelectedLoc, isSelected);
-            glUniform3fv(highlightColorLoc, 1, glm::value_ptr(glm::vec3(1.0f, 1.0f, 0.0f))); // Yellow
+            glm::vec3 hlColor = (g_editorState && g_editorState->IsEditMode())
+                ? glm::vec3(0.0f, 0.8f, 1.0f)   // Cyan for edit mode
+                : glm::vec3(1.0f, 1.0f, 0.0f);   // Yellow for play mode
+            glUniform3fv(highlightColorLoc, 1, glm::value_ptr(hlColor));
         }
         // Draw
         obj->GetModel()->Draw(shader);
@@ -1020,6 +1087,9 @@ int main(int argc, const char* argv[]) {
     initCombatSystem();
     initGui();
 
+    g_editorState = new gps::EditorState();
+    g_guiManager->BindEditorState(g_editorState);
+
     std::cout << "✅ Initialization complete!" << std::endl;
     std::cout << "\n🎮 CONTROLS:" << std::endl;
     std::cout << "  WASD - Move camera" << std::endl;
@@ -1048,6 +1118,9 @@ int main(int argc, const char* argv[]) {
         if (g_scene) {
             g_scene->Update(deltaTime);
         }
+
+        // ========== PLAY MODE ONLY SYSTEMS ==========
+        if (!g_editorState || g_editorState->IsPlayMode()) {
 
         // Resource production
         if (g_scene) {
@@ -1143,6 +1216,8 @@ int main(int argc, const char* argv[]) {
             for (int id : toDestroy) g_scene->DestroyObject(id);
         }
 
+        } // end play-mode-only systems
+
     myCustomShader.useShaderProgram();
     
     glm::mat4 view = myCamera.getViewMatrix();
@@ -1167,12 +1242,8 @@ int main(int argc, const char* argv[]) {
     if (g_guiManager) {
         g_guiManager->SetDeltaTime(deltaTime);
         g_guiManager->SetCameraPosition(myCamera.getCameraPosition());
-        g_guiManager->SetZoomFactor(zoomFactor);    
-        g_guiManager->BeginFrame();
-        g_guiManager->RenderAllPanels();
-        g_guiManager->EndFrame();
+        g_guiManager->SetZoomFactor(zoomFactor);
     }
-        //RENDER
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -1226,6 +1297,7 @@ int main(int argc, const char* argv[]) {
     }
 
     // Cleanup
+    delete g_editorState;
     delete g_guiManager;
     delete g_scene;
     delete g_sceneManager;
