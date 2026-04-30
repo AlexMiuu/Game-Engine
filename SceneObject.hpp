@@ -59,6 +59,15 @@ namespace gps {
         int   targetID = -1;
         float damage   = 0.0f;
     };
+
+    struct OrbitData {
+        bool isOrbiting = false;
+        int parentID = -1;
+        float orbitRadius = 0.0f;
+        float orbitSpeed = 1.0f;   // radians/sec
+        float orbitAngle = 0.0f;
+        float orbitHeight = 20.0f;
+    };
     /**
      * @brief SceneObject - container pentru un obiect �n scen�
      *
@@ -136,6 +145,8 @@ namespace gps {
         UnitStats unitStats;
 
         ProjectileData projectileData;
+
+        OrbitData orbitData;
 
     private:
         int m_id;

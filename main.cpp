@@ -133,6 +133,8 @@ gps::Model3D oilRigModel;
 gps::Model3D frigate;
 gps::Model3D destroyer;
 gps::Model3D islandT;
+gps::Model3D aircraft;
+gps::Model3D aircraftCarrier;
 
 
 // ===========================
@@ -327,6 +329,26 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             if (spawned) {
                 std::cout << "Placed " << g_sceneManager->m_propPlacementLabel << " at ("
                     << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
+
+                if (spawned->GetTag() == "aircraftCarrier") {
+                    glm::vec3 aircraftPos = worldPos + glm::vec3(spawned->unitStats.attackRange, 20.0f, 0.0f);
+                    gps::SceneObject* plane = g_sceneManager->SpawnObject(
+                        "Aircraft_for_" + std::to_string(spawned->GetID()),
+                        "aircraft",
+                        "aircraft",
+                        aircraftPos,
+                        glm::vec3(3.0f)
+                    );
+                    if (plane) {
+                        plane->orbitData.isOrbiting = true;
+                        plane->orbitData.parentID = spawned->GetID();
+                        plane->orbitData.orbitRadius = spawned->unitStats.attackRange;
+                        plane->orbitData.orbitSpeed = 1.0f;
+                        plane->orbitData.orbitAngle = 0.0f;
+                        plane->orbitData.orbitHeight = 20.0f;
+                        plane->SetCollisionRadius(0.0f);
+                    }
+                }
             }
         }
         return;
@@ -594,6 +616,8 @@ void initModels() {
 	frigate.LoadModel("objects/frigate/Frigate.obj", "textures/");
     destroyer.LoadModel("objects/destroyer/Destroyer.obj", "textures/");
     islandT.LoadModel("objects/islandT/islandT.obj","textures/");
+    aircraft.LoadModel("objects/aircraft/aircraft.obj","textures/");
+    aircraftCarrier.LoadModel("objects/aircraftCarrier/AircraftCarrier.obj","textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -695,6 +719,8 @@ void initSceneManager() {
 	g_sceneManager->RegisterModel("frigate", &frigate);
 	g_sceneManager->RegisterModel("destroyer", &destroyer); 
     g_sceneManager->RegisterModel("islandT", &islandT);
+    g_sceneManager->RegisterModel("aircraft", &aircraft);
+    g_sceneManager->RegisterModel("aircraftCarrier",&aircraftCarrier);
 
     g_tileManager.Initialize(&waterTyle, g_scene);
     // Generate initial 3x3 tile grid centered at origin
@@ -1141,6 +1167,40 @@ int main(int argc, const char* argv[]) {
                 if (g_scene) g_scene->DestroyObject(deadID);
             }
             g_combatSystem->ClearDeadIDs();
+        }
+
+        // Orbit update: aircraft circles around parent carrier using circle equation
+        {
+            std::vector<int> deadAircraftIDs;
+            for (const auto& objPtr : g_scene->GetObjects()) {
+                gps::SceneObject* obj = objPtr.get();
+                if (!obj->IsActive() || !obj->orbitData.isOrbiting) continue;
+
+                gps::SceneObject* parent = g_scene->GetObjectByID(obj->orbitData.parentID);
+                if (!parent || !parent->IsActive() || !parent->unitStats.isAlive) {
+                    obj->unitStats.isAlive = false;
+                    obj->SetActive(false);
+                    deadAircraftIDs.push_back(obj->GetID());
+                    continue;
+                }
+
+                obj->orbitData.orbitAngle += obj->orbitData.orbitSpeed * deltaTime;
+
+                // Circle equation: P = Center + R * (cos(a), 0, sin(a))
+                float a = obj->orbitData.orbitAngle;
+                float r = obj->orbitData.orbitRadius;
+                glm::vec3 center = parent->GetTransform().GetPosition();
+
+                obj->GetTransform().SetPosition(glm::vec3(
+                    center.x + r * std::cos(a),
+                    center.y + obj->orbitData.orbitHeight,
+                    center.z + r * std::sin(a)
+                ));
+                obj->GetTransform().SetRotation(glm::vec3(0.0f, -glm::degrees(a) + 180, 0.0f));
+                obj->UpdateWorldBounds();
+            }
+            for (int id : deadAircraftIDs)
+                g_scene->DestroyObject(id);
         }
 
         // Update troops movement

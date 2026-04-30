@@ -29,6 +29,7 @@ namespace gps {
             if (!candidate->IsActive()) continue;
             if (candidate->GetID() == attacker->GetID()) continue;
             if (candidate->projectileData.isProjectile) continue;
+            if (candidate->orbitData.isOrbiting) continue;
 
             const UnitStats& cStats = candidate->unitStats;
             if (!cStats.isAlive) continue;

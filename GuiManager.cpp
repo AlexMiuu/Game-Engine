@@ -240,6 +240,14 @@ namespace gps {
                 }
             }
 
+                if (ColoredButton("Spawn Carrier", ImVec2(-1, 40),
+                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("aircraftCarrier", "aircraftCarrier", glm::vec3(4.5f), "AircraftCarrier");
+                }
+            }
+
             if (ColoredButton("Spawn Enemy Frigate", ImVec2(-1, 40),
                 ImVec4(0.7f, 0.1f, 0.1f, 1.0f), ImVec4(0.7f, 0.1f, 0.1f, 1.0f)))
             {

@@ -451,6 +451,28 @@ namespace gps {
             stats.isMovable = true;
             stats.faction = 1;
         }
+        else if(tag =="aircraftCarrier")
+        {
+            stats.health = 1000;
+            stats.attack = 0;
+            stats.maxHealth = 1000;
+            stats.attackRange = 100.0f;
+            stats.isCombatUnit = true;
+            stats.isAlive = true;
+            stats.isMovable = true;
+            stats.faction = 1;
+        }
+        else if (tag == "aircraft")
+        {
+            stats.health = 100;
+            stats.attack = 100;
+            stats.maxHealth = 100;
+            stats.attackRange = 150.0f;
+            stats.isCombatUnit = true;
+            stats.isAlive = true;
+            stats.isMovable = false;
+            stats.faction = 1;
+        }
         return stats;
 	}
 
