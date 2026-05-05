@@ -135,7 +135,8 @@ gps::Model3D destroyer;
 gps::Model3D islandT;
 gps::Model3D aircraft;
 gps::Model3D aircraftCarrier;
-
+gps::Model3D turret;
+gps::Model3D projectile;
 
 // ===========================
 // SKYBOX
@@ -618,6 +619,8 @@ void initModels() {
     islandT.LoadModel("objects/islandT/islandT.obj","textures/");
     aircraft.LoadModel("objects/aircraft/aircraft.obj","textures/");
     aircraftCarrier.LoadModel("objects/aircraftCarrier/AircraftCarrier.obj","textures/");
+    turret.LoadModel("objects/turret/Turret.obj", "textures/");
+    projectile.LoadModel("objects/projectile/Projectile.obj", "textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -721,6 +724,8 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("islandT", &islandT);
     g_sceneManager->RegisterModel("aircraft", &aircraft);
     g_sceneManager->RegisterModel("aircraftCarrier",&aircraftCarrier);
+    g_sceneManager->RegisterModel("turret", &turret);
+    g_sceneManager->RegisterModel("projectile", &projectile);
 
     g_tileManager.Initialize(&waterTyle, g_scene);
     // Generate initial 3x3 tile grid centered at origin
@@ -1257,15 +1262,41 @@ int main(int argc, const char* argv[]) {
             for (const auto& objPtr : g_scene->GetObjects()) {
                 gps::SceneObject* obj = objPtr.get();
                 if (!obj->IsActive() || !obj->projectileData.isProjectile || obj->movement.isMoving) continue;
-                gps::SceneObject* target = g_scene->GetObjectByID(obj->projectileData.targetID);
-                if (target && target->IsActive() && target->unitStats.isAlive) {
-                    target->unitStats.health -= (int)obj->projectileData.damage;
-                    if (target->unitStats.health <= 0) {
-                        target->unitStats.health  = 0;
-                        target->unitStats.isAlive  = false;
-                        target->SetActive(false);
-                        killed.push_back(target->GetID());
+
+                auto applyDamage = [&](gps::SceneObject* victim, int dmg) {
+                    if (!victim || !victim->IsActive() || !victim->unitStats.isAlive) return;
+                    victim->unitStats.health -= dmg;
+                    if (victim->unitStats.health <= 0) {
+                        victim->unitStats.health = 0;
+                        victim->unitStats.isAlive = false;
+                        victim->SetActive(false);
+                        killed.push_back(victim->GetID());
+                    } else if (victim->unitStats.targetID == -1) {
+                        // Retaliation: assign projectile owner so Defensive units fight back
+                        victim->unitStats.targetID = obj->projectileData.ownerID;
                     }
+                };
+
+                const int dmg = (int)obj->projectileData.damage;
+                const float splash = obj->projectileData.splashRadius;
+                if (splash > 0.0f) {
+                    // AOE: damage everything in radius around the impact point,
+                    // skipping owner, projectiles, and same-faction units.
+                    const glm::vec3 impact = obj->GetWorldCenter();
+                    gps::SceneObject* owner = g_scene->GetObjectByID(obj->projectileData.ownerID);
+                    const int ownerFaction = owner ? owner->unitStats.faction : 0;
+                    for (const auto& vPtr : g_scene->GetObjects()) {
+                        gps::SceneObject* victim = vPtr.get();
+                        if (!victim->IsActive()) continue;
+                        if (victim->projectileData.isProjectile) continue;
+                        if (victim->GetID() == obj->projectileData.ownerID) continue;
+                        const int vf = victim->unitStats.faction;
+                        if (ownerFaction != 0 && vf != 0 && vf == ownerFaction) continue;
+                        if (glm::distance(victim->GetWorldCenter(), impact) > splash) continue;
+                        applyDamage(victim, dmg);
+                    }
+                } else {
+                    applyDamage(g_scene->GetObjectByID(obj->projectileData.targetID), dmg);
                 }
                 toDestroy.push_back(obj->GetID());
             }

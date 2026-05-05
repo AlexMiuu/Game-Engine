@@ -32,6 +32,18 @@ namespace gps {
     };
 
 
+    enum class AttackMode {
+        Melee,            // instant damage on the target
+        Projectile,       // spawn travelling cannonball, single-target on impact
+        ProjectileSplash, // spawn travelling cannonball, AOE on impact
+    };
+
+    enum class CombatStance {
+        Neutral,     // baseline: auto-acquires, normal cooldown, normal damage
+        Aggressive,  // faster cooldown, normal damage
+        Defensive,   // +30% damage dealt, holds ground (retaliates only)
+    };
+
     struct UnitStats {
         int maxHealth = 100;
         int health = 100;
@@ -40,10 +52,16 @@ namespace gps {
         bool isCombatUnit = false;
         bool isAlive = true;
         bool isMovable = true;
+        // Per-unit base fire rate (seconds between shots). Lower = faster (e.g. 0.05 = CIWS-like 20 rps).
+        float baseAttackCooldown = 1.0f;
         // Runtime combat state (managed by CombatSystem)
         float attackCooldown = 0.0f;
         int   targetID = -1;
-        
+
+        AttackMode attackMode = AttackMode::Melee;
+        float splashRadius = 0.0f; // only used by ProjectileSplash
+
+        CombatStance stance = CombatStance::Neutral;
 
         // Resource production
         std::string resourceType = "none";
@@ -58,6 +76,7 @@ namespace gps {
         int   ownerID  = -1;
         int   targetID = -1;
         float damage   = 0.0f;
+        float splashRadius = 0.0f; // 0 = single-target
     };
 
     struct OrbitData {

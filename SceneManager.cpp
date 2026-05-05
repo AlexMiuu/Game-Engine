@@ -405,6 +405,7 @@ namespace gps {
             stats.isAlive = true;
             stats.isMovable = true;
             stats.faction = 1;
+            stats.attackMode = AttackMode::Projectile;
         }
         else if (tag == "enemyShip")
         {
@@ -416,6 +417,7 @@ namespace gps {
             stats.isAlive = true;
             stats.isMovable = true;
             stats.faction = 2;
+            stats.attackMode = AttackMode::Melee;
         }
         else if (tag == "oilRig")
         {
@@ -439,6 +441,7 @@ namespace gps {
             stats.isAlive = true;
             stats.isMovable = true;
             stats.faction = 1;
+            stats.attackMode = AttackMode::Projectile;
 		}
         else if (tag == "destroyer")
         {
@@ -450,6 +453,8 @@ namespace gps {
             stats.isAlive = true;
             stats.isMovable = true;
             stats.faction = 1;
+            stats.attackMode = AttackMode::ProjectileSplash;
+            stats.splashRadius = 15.0f;
         }
         else if(tag =="aircraftCarrier")
         {
@@ -472,6 +477,19 @@ namespace gps {
             stats.isAlive = true;
             stats.isMovable = false;
             stats.faction = 1;
+        }
+        else if (tag == "turret")
+        {
+            stats.health = 150;
+            stats.attack = 15;
+            stats.maxHealth = 150;
+            stats.attackRange = 150.0f;
+            stats.isCombatUnit = true;
+            stats.isAlive = true;
+            stats.isMovable = false;
+            stats.faction = 2;
+            stats.attackMode = AttackMode::Projectile;
+            stats.baseAttackCooldown = 0.05f; // CIWS-like ~20 rounds/sec
         }
         return stats;
 	}

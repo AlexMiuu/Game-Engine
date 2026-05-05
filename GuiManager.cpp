@@ -265,6 +265,16 @@ namespace gps {
                 }
             }
 
+        ImGui::SeparatorText("Buildings");
+
+            if (ColoredButton("Spawn CIWS", ImVec2(-1, 40),
+                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("turret", "turret", glm::vec3(4.5f), "Turret");
+                }
+            }
+
 
 
         ImGui::End();
@@ -586,6 +596,33 @@ namespace gps {
 
                 ImGui::Separator();
 
+                ImGui::Text("Upgrades");
+
+				ImGui::BulletText("Attack: %d", obj->unitStats.attack);
+				ImGui::BulletText("Range: %d", obj->unitStats.attackRange);
+
+
+                if (ImGui::Button("Upgrade Attack", ImVec2(120, 24)))
+                {
+                    if (m_sceneManager) {
+                    std::cout << "Upgrade Attack button clicked for object ID: " << obj->GetID() << std::endl;
+                    obj->unitStats.attack += 10;
+                    std::cout << "attack value DEBUG  " << obj->unitStats.attack << std::endl;
+                    //ImGui::BulletText("Range: %d", obj->unitStats.attackRange);
+                    }
+                }
+
+                if (ImGui::Button("Upgrade Range", ImVec2(120, 24)))
+                {
+                    if (m_sceneManager) {
+                    std::cout << "Upgrade Range button clicked for object ID: " << obj->GetID() << std::endl;
+                    obj->unitStats.attackRange += 10;
+                    std::cout << "attack value DEBUG  " << obj->unitStats.attackRange << std::endl;
+                    }
+                }
+
+                ImGui::Separator();
+
                 // Position
                 glm::vec3 pos = obj->GetTransform().GetPosition();
                 ImGui::Text("Position: (%.1f, %.1f, %.1f)", pos.x, pos.y, pos.z);
@@ -618,6 +655,15 @@ namespace gps {
                     }
                 }
 
+                // Combat stance (combat units only)
+                if (obj->unitStats.isCombatUnit) {
+                    static const char* kStanceNames[] = { "Neutral", "Aggressive", "Defensive" };
+                    int s = (int)obj->unitStats.stance;
+                    ImGui::SetNextItemWidth(140.0f);
+                    if (ImGui::Combo("Stance", &s, kStanceNames, IM_ARRAYSIZE(kStanceNames)))
+                        obj->unitStats.stance = (CombatStance)s;
+                }
+
                 // Moving status
                 if (obj->movement.isMoving) {
                     ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Moving...");
@@ -646,6 +692,9 @@ namespace gps {
             int troopCount = 0;
             int otherCount = 0;
             int movingCount = 0;
+            int combatCount = 0;
+            int firstStance = -1;
+            bool stanceMixed = false;
 
             for (int id : selectedIDs) {
                 SceneObject* obj = m_scene->GetObjectByID(id);
@@ -657,6 +706,13 @@ namespace gps {
                 else otherCount++;
 
                 if (obj->movement.isMoving) movingCount++;
+
+                if (obj->unitStats.isCombatUnit) {
+                    int s = (int)obj->unitStats.stance;
+                    if (firstStance == -1) firstStance = s;
+                    else if (s != firstStance) stanceMixed = true;
+                    combatCount++;
+                }
             }
 
             if (orcCount > 0)   ImGui::Text("  Orcs: %d", orcCount);
@@ -670,6 +726,27 @@ namespace gps {
             }
             else {
                 ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "All idle");
+            }
+
+            // Stance combo: applies to all selected combat units on change
+            if (combatCount > 0) {
+                static const char* kStanceNames[] = { "Neutral", "Aggressive", "Defensive" };
+                int s = stanceMixed ? -1 : firstStance;
+                ImGui::SetNextItemWidth(140.0f);
+                const char* preview = (s >= 0 && s < 3) ? kStanceNames[s] : "Mixed";
+                if (ImGui::BeginCombo("Stance", preview)) {
+                    for (int i = 0; i < 3; ++i) {
+                        bool selected = (s == i);
+                        if (ImGui::Selectable(kStanceNames[i], selected)) {
+                            for (int id : selectedIDs) {
+                                SceneObject* obj = m_scene->GetObjectByID(id);
+                                if (obj && obj->unitStats.isCombatUnit)
+                                    obj->unitStats.stance = (CombatStance)i;
+                            }
+                        }
+                    }
+                    ImGui::EndCombo();
+                }
             }
 
             // Lista scurta de ID-uri

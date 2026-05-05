@@ -6,6 +6,7 @@
 #include "SceneManager.hpp"
 #include <glm/glm.hpp>
 #include <GLFW/glfw3.h>
+#include <cmath>
 #include <iostream>
 
 namespace gps {
@@ -58,14 +59,19 @@ namespace gps {
     void CombatSystem::SpawnCannonBall(SceneObject* origin, SceneObject* target, double fuseTime) {
         if (!m_sceneManager) return;
 
-        SceneObject* cannonBall = m_sceneManager->SpawnObject("orc", "orc", "orc",
-            origin->GetTransform().GetPosition(), glm::vec3(0.5f, 0.5f, 0.5f));
+        SceneObject* cannonBall = m_sceneManager->SpawnObject("projectile", "projectile", "projectile",
+            origin->GetTransform().GetPosition(), glm::vec3(3.5f, 3.5f, 3.5f));
         if (!cannonBall) return;
 
         cannonBall->projectileData.isProjectile = true;
         cannonBall->projectileData.ownerID      = origin->GetID();
         cannonBall->projectileData.targetID     = target->GetID();
-        cannonBall->projectileData.damage       = (float)origin->unitStats.attack;
+        float dmg = (float)origin->unitStats.attack;
+        if (origin->unitStats.stance == CombatStance::Defensive) dmg *= 1.3f;
+        cannonBall->projectileData.damage       = dmg;
+        cannonBall->projectileData.splashRadius =
+            (origin->unitStats.attackMode == AttackMode::ProjectileSplash)
+            ? origin->unitStats.splashRadius : 0.0f;
 
         cannonBall->movement.isMoving      = true;
         cannonBall->movement.moveStartPos  = origin->GetWorldCenter();
@@ -110,29 +116,58 @@ namespace gps {
                 }
             }
 
-            // Find new target if none
-            if (stats.targetID == -1)
+            // Find new target if none.
+            // Defensive stance holds ground: never auto-acquires; only fights back
+            // at whoever assigned itself as targetID via retaliation.
+            if (stats.targetID == -1 && stats.stance != CombatStance::Defensive)
                 stats.targetID = FindNearestEnemy(attacker);
+
+            // Face current target — for stationary combat units (turrets) that don't
+            // otherwise drive their own rotation. Skip orbiting units (aircraft already
+            // set their yaw from orbit angle) and movable units (they yaw from movement).
+            if (stats.targetID != -1 && !stats.isMovable && !attacker->orbitData.isOrbiting) {
+                SceneObject* target = m_scene->GetObjectByID(stats.targetID);
+                if (target) {
+                    glm::vec3 dir = target->GetWorldCenter() - attacker->GetWorldCenter();
+                    if (glm::length(dir) > 0.0001f) {
+                        float yaw = glm::degrees(std::atan2(dir.x, dir.z));
+                        glm::vec3 r = attacker->GetTransform().GetRotation();
+                        attacker->GetTransform().SetRotation(glm::vec3(r.x, yaw, r.z));
+                    }
+                }
+            }
 
             // Attack if ready and target exists
             if (stats.targetID != -1 && stats.attackCooldown <= 0.0f) {
                 SceneObject* target = m_scene->GetObjectByID(stats.targetID);
                 if (target) {
-                    bool isShip = (attacker->GetTag() == "ship"||attacker->GetTag() == "frigate"||attacker->GetTag() == "destroyer");
-                    if (isShip) {
+                    switch (stats.attackMode) {
+                    case AttackMode::Projectile:
+                    case AttackMode::ProjectileSplash: {
                         float dist = glm::distance(attacker->GetWorldCenter(), target->GetWorldCenter());
                         pendingShots.push_back({ attacker, target, dist / 80.0 });
-                    } else {
+                        break;
+                    }
+                    case AttackMode::Melee:
+                    default: {
                         UnitStats& tStats = target->unitStats;
-                        tStats.health -= stats.attack;
+                        int dmg = stats.attack;
+                        if (stats.stance == CombatStance::Defensive) dmg = (int)(dmg * 1.3f);
+                        tStats.health -= dmg;
                         if (tStats.health < 0) tStats.health = 0;
                         if (tStats.health <= 0) {
                             tStats.isAlive = false;
                             target->SetActive(false);
                             m_deadThisFrame.push_back(target->GetID());
+                        } else if (tStats.targetID == -1) {
+                            // Retaliation: assign attacker so Defensive units fight back
+                            tStats.targetID = attacker->GetID();
                         }
+                        break;
                     }
-                    stats.attackCooldown = 1.0f;
+                    }
+                    float baseCD = stats.baseAttackCooldown;
+                    stats.attackCooldown = (stats.stance == CombatStance::Aggressive) ? baseCD * 0.7f : baseCD;
                 }
             }
         }
