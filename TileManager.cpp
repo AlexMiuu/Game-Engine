@@ -10,8 +10,28 @@
 #include <iostream>
 #include <cmath>
 #include <limits>
+#include <random>
 
 namespace gps {
+
+    // ===========================
+    // TILE EFFECT TABLE
+    // ===========================
+    const TileEffect& GetTileEffect(TileType t) {
+        static const TileEffect kSea      { 1.0f, "none", 1.0f };
+        static const TileEffect kOil      { 1.0f, "Oil",  2.0f };
+        static const TileEffect kFish     { 1.0f, "Fish", 2.0f };
+        static const TileEffect kShallows { 2.0f, "none", 1.0f }; // 2x duration = half speed
+        static const TileEffect kLand     { 1.0f, "none", 1.0f };
+        switch (t) {
+            case TileType::Oil:      return kOil;
+            case TileType::Fish:     return kFish;
+            case TileType::Shallows: return kShallows;
+            case TileType::Land:     return kLand;
+            case TileType::Sea:
+            default:                 return kSea;
+        }
+    }
 
     TileManager::TileManager(float tileSize, glm::vec3 model_size, int height)
         : m_terrainModel(nullptr)
@@ -35,6 +55,11 @@ namespace gps {
             std::cout << " (scene: " << m_scene->GetName() << ")";
         }
         std::cout << std::endl;
+    }
+
+    void TileManager::RegisterTileModel(TileType type, Model3D* model) {
+        if (!model) return;
+        m_typeModels[static_cast<int>(type)] = model;
     }
 
     // ===========================
@@ -186,18 +211,49 @@ namespace gps {
 
     void TileManager::GenerateAndLoadGrid(int minX, int maxX, int minZ, int maxZ,
         const std::string& terrainType) {
-        for (int x = minX; x <= maxX; ++x) {
-            for (int z = minZ; z <= maxZ; ++z) {
+        // 1. create all tiles (no scene objects yet)
+        for (int x = minX; x <= maxX; ++x)
+            for (int z = minZ; z <= maxZ; ++z)
                 CreateTile(x, z, terrainType);
+
+        // 2. assign procedural TileType so LoadTile knows which icon to spawn
+        AssignProceduralTypes();
+
+        // 3. load all (creates terrain SceneObjects + spawns icons)
+        for (int x = minX; x <= maxX; ++x)
+            for (int z = minZ; z <= maxZ; ++z)
                 LoadTile(x, z);
-            }
-        }
+
         std::cout << "[TileManager] Generated and loaded grid: " << m_tiles.size() << " tiles" << std::endl;
     }
 
     // ===========================
-    // QUERIES
+    // PROCEDURAL TYPE ASSIGNMENT
     // ===========================
+    void TileManager::AssignProceduralTypes(unsigned seed) {
+        std::mt19937 rng(seed);
+        std::uniform_real_distribution<float> roll(0.0f, 1.0f);
+
+        // Density per type (sums < 1.0; remainder stays Sea).
+        // Tunable: bump up Oil/Fish to see more icons during dev.
+        constexpr float kOil      = 0.15f;
+        constexpr float kFish     = 0.15f;
+        constexpr float kShallows = 0.10f;
+        constexpr float kLand     = 0.10f;
+
+        for (auto& pair : m_tiles) {
+            Tile& tile = pair.second;
+            // Don't reassign tiles that already have a non-default type or are already loaded.
+            if (tile.type != TileType::Sea || tile.isLoaded) continue;
+
+            float r = roll(rng);
+            if      (r < kOil)                                tile.type = TileType::Oil;
+            else if (r < kOil + kFish)                        tile.type = TileType::Fish;
+            else if (r < kOil + kFish + kShallows)            tile.type = TileType::Shallows;
+            else if (r < kOil + kFish + kShallows + kLand)    tile.type = TileType::Land;
+            // else stays Sea
+        }
+    }
 
     Tile* TileManager::GetTile(int gridX, int gridZ) {
         GridKey key = { gridX, gridZ };
@@ -216,15 +272,44 @@ namespace gps {
         return m_scene->GetObjectByID(tile->sceneObjectId);
     }
 
-    void TileManager::WorldToGrid(const glm::vec3& worldPos, int& outGridX, int& outGridZ) const {
-        outGridX = static_cast<int>(std::floor(worldPos.x / m_tileSize));
-        outGridZ = static_cast<int>(std::floor(worldPos.z / m_tileSize));
-    }
+    // ---------- Hex grid math ----------
+    // Flat-top hexes (vertices at +X / -X), odd-q offset coordinates
+    // (odd columns are shifted in +Z by half a row).
+    //   m_tileSize = world center-to-vertex distance (the canonical "size" of a hex).
+    //   colSpacing = 1.5 * size  (column-to-column horizontal distance)
+    //   rowSpacing = sqrt(3) * size  (row-to-row vertical distance, also the flat-edge length doubled... no, just that)
 
     glm::vec3 TileManager::GridToWorld(int gridX, int gridZ) const {
-        float worldX = gridX * m_tileSize + (m_tileSize * 0.5f);
-        float worldZ = gridZ * m_tileSize + (m_tileSize * 0.5f);
-        return glm::vec3(worldX, 0.0f, worldZ);
+        const float s = m_tileSize;
+        const float colSpacing = 1.5f * s;
+        const float rowSpacing = std::sqrt(3.0f) * s;
+        const float zShift = (gridX & 1) ? rowSpacing * 0.5f : 0.0f;
+        return glm::vec3(gridX * colSpacing, 0.0f, gridZ * rowSpacing + zShift);
+    }
+
+    void TileManager::WorldToGrid(const glm::vec3& worldPos, int& outGridX, int& outGridZ) const {
+        const float s = m_tileSize;
+        // World -> fractional axial (flat-top)
+        const float qf = (2.0f / 3.0f) * worldPos.x / s;
+        const float rf = ((-1.0f / 3.0f) * worldPos.x + (std::sqrt(3.0f) / 3.0f) * worldPos.z) / s;
+        // Cube round (axial -> cube uses x=q, z=r, y=-x-z)
+        float x = qf;
+        float z = rf;
+        float y = -x - z;
+        float rx = std::round(x);
+        float ry = std::round(y);
+        float rz = std::round(z);
+        const float xd = std::abs(rx - x);
+        const float yd = std::abs(ry - y);
+        const float zd = std::abs(rz - z);
+        if (xd > yd && xd > zd)      rx = -ry - rz;
+        else if (yd > zd)            ry = -rx - rz;
+        else                         rz = -rx - ry;
+        // Axial -> odd-q offset
+        const int col = static_cast<int>(rx);
+        const int row = static_cast<int>(rz) + (col - (col & 1)) / 2;
+        outGridX = col;
+        outGridZ = row;
     }
 
     std::vector<Tile*> TileManager::GetLoadedTiles() {
@@ -314,9 +399,17 @@ namespace gps {
 
         if (!hasLoaded) return false;
 
-        // World-space bounds: from the left edge of minX tile to the right edge of maxX tile
-        outMin = glm::vec3(minX * m_tileSize, -1000.0f, minZ * m_tileSize);
-        outMax = glm::vec3((maxX + 1) * m_tileSize, 1000.0f, (maxZ + 1) * m_tileSize);
+        // World-space AABB enclosing all loaded hex tiles.
+        // Flat-top hex extents: ±size on X (vertex), ±sqrt(3)/2 * size on Z (edge midpoint).
+        const float s = m_tileSize;
+        const float halfW = s;
+        const float halfH = std::sqrt(3.0f) * 0.5f * s;
+        glm::vec3 cMin = GridToWorld(minX, minZ);
+        glm::vec3 cMax = GridToWorld(maxX, maxZ);
+        // Account for the row-shift on odd columns by widening the Z range by half a row.
+        const float rowShift = std::sqrt(3.0f) * 0.5f * s;
+        outMin = glm::vec3(cMin.x - halfW, -1000.0f, std::min(cMin.z, cMax.z) - halfH - rowShift);
+        outMax = glm::vec3(cMax.x + halfW,  1000.0f, std::max(cMin.z, cMax.z) + halfH + rowShift);
         return true;
     }
 
@@ -391,6 +484,11 @@ namespace gps {
     int TileManager::CreateSceneObjectForTile(const Tile& tile) {
         if (!m_scene || !m_terrainModel) return -1;
 
+        // Pick the model registered for this TileType, fall back to terrain default
+        Model3D* model = m_terrainModel;
+        auto mit = m_typeModels.find(static_cast<int>(tile.type));
+        if (mit != m_typeModels.end() && mit->second) model = mit->second;
+
         // Creeaza un SceneObject real in scena
         std::string tileName = "Tile_" + std::to_string(tile.gridX) + "_" + std::to_string(tile.gridZ);
         SceneObject* obj = m_scene->CreateObject(tileName);
@@ -398,7 +496,7 @@ namespace gps {
         if (!obj) return -1;
 
         // Seteaza modelul
-        obj->SetModel(m_terrainModel);
+        obj->SetModel(model);
 
         // Seteaza transform
         obj->GetTransform().SetPosition(tile.worldPos);
@@ -410,7 +508,7 @@ namespace gps {
         // Calculeaza bounding sphere
         glm::vec3 center;
         float radius;
-        ComputeLocalBoundingSphere(m_terrainModel, center, radius);
+        ComputeLocalBoundingSphere(model, center, radius);
         obj->SetLocalBounds(center, radius);
         obj->UpdateWorldBounds();
 

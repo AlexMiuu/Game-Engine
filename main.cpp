@@ -138,6 +138,13 @@ gps::Model3D aircraftCarrier;
 gps::Model3D turret;
 gps::Model3D projectile;
 
+// Hex tile models (objects/tiles/*.obj). Center-to-vertex = 5.587 in model units.
+gps::Model3D waterTile;
+gps::Model3D oilTile;
+gps::Model3D fishTile;
+gps::Model3D desertTile;
+gps::Model3D greenTile;
+
 // ===========================
 // SKYBOX
 // ===========================
@@ -154,7 +161,9 @@ std::vector<const GLchar*> faces{
 // ===========================
 // TILE MANAGER
 // ===========================
-gps::TileManager g_tileManager;
+// Hex tile model has center-to-vertex = 5.587 in model units; scaled by 27 -> ~150.85 world units.
+// m_tileSize must equal world center-to-vertex for hexes to pack flush.
+gps::TileManager g_tileManager(150.85f, glm::vec3(27.0f), -60);
 
 // ===========================
 // NOILE SISTEME (GLOBALE)
@@ -452,6 +461,13 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             obj->movement.moveStartTime = glfwGetTime();
             obj->movement.moveDuration = 2.0f;
 
+            // Slow-tile gimmick: stretch duration based on the destination tile.
+            int dgx, dgz;
+            g_tileManager.WorldToGrid(formationPos, dgx, dgz);
+            if (gps::Tile* destTile = g_tileManager.GetTile(dgx, dgz)) {
+                obj->movement.moveDuration *= gps::GetTileEffect(destTile->type).moveDurationMul;
+            }
+
             idx++;
         }
     }
@@ -621,6 +637,11 @@ void initModels() {
     aircraftCarrier.LoadModel("objects/aircraftCarrier/AircraftCarrier.obj","textures/");
     turret.LoadModel("objects/turret/Turret.obj", "textures/");
     projectile.LoadModel("objects/projectile/Projectile.obj", "textures/");
+    waterTile.LoadModel("objects/tiles/waterTile.obj", "textures/");
+    oilTile.LoadModel("objects/tiles/oilTile.obj", "textures/");
+    fishTile.LoadModel("objects/tiles/fishTile.obj", "textures/");
+    desertTile.LoadModel("objects/tiles/desertTile.obj", "textures/");
+    greenTile.LoadModel("objects/tiles/greenTile.obj", "textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -727,7 +748,12 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("turret", &turret);
     g_sceneManager->RegisterModel("projectile", &projectile);
 
-    g_tileManager.Initialize(&waterTyle, g_scene);
+    g_tileManager.Initialize(&waterTile, g_scene);
+    g_tileManager.RegisterTileModel(gps::TileType::Sea,      &waterTile);
+    g_tileManager.RegisterTileModel(gps::TileType::Oil,      &oilTile);
+    g_tileManager.RegisterTileModel(gps::TileType::Fish,     &fishTile);
+    g_tileManager.RegisterTileModel(gps::TileType::Shallows, &desertTile);
+    g_tileManager.RegisterTileModel(gps::TileType::Land,     &greenTile);
     // Generate initial 3x3 tile grid centered at origin
     g_tileManager.GenerateAndLoadGrid(-2, 1, -1, 2);
 
@@ -1153,13 +1179,20 @@ int main(int argc, const char* argv[]) {
         // ========== PLAY MODE ONLY SYSTEMS ==========
         if (!g_editorState || g_editorState->IsPlayMode()) {
 
-        // Resource production
+        // Resource production (with tile bonus when extractor is parked on a matching tile)
         if (g_scene) {
             for (auto* obj : g_scene->GetObjectsRaw()) {
                 if (!obj->IsActive()) continue;
                 const gps::UnitStats& s = obj->unitStats;
                 if (s.productionRate > 0.0f && !s.resourceType.empty() && s.resourceType != "none") {
-                    gps::ResourceManager::Instance().Deposit(s.resourceType, s.productionRate * deltaTime);
+                    float bonus = 1.0f;
+                    int gx, gz;
+                    g_tileManager.WorldToGrid(obj->GetTransform().GetPosition(), gx, gz);
+                    if (gps::Tile* t = g_tileManager.GetTile(gx, gz)) {
+                        const gps::TileEffect& e = gps::GetTileEffect(t->type);
+                        if (e.resource == s.resourceType) bonus = e.productionBonus;
+                    }
+                    gps::ResourceManager::Instance().Deposit(s.resourceType, s.productionRate * bonus * deltaTime);
                 }
             }
         }

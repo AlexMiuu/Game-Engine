@@ -184,6 +184,9 @@ namespace gps {
         ImGui::SameLine(0, 16);
         ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f),
             "Oil: %.0f", gps::ResourceManager::Instance().Get("Oil"));
+        ImGui::SameLine(0, 12);
+        ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.5f, 1.0f),
+            "Fish: %.0f", gps::ResourceManager::Instance().Get("Fish"));
 
         // Selected
         ImGui::SameLine(0, 30);

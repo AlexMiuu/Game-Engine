@@ -129,7 +129,7 @@ namespace gps {
                 SceneObject* target = m_scene->GetObjectByID(stats.targetID);
                 if (target) {
                     glm::vec3 dir = target->GetWorldCenter() - attacker->GetWorldCenter();
-                    if (glm::length2(dir) > 0.0001f) {
+                    if (glm::length(dir) > 0.0001f) {
                         float yaw = glm::degrees(std::atan2(dir.x, dir.z));
                         glm::vec3 r = attacker->GetTransform().GetRotation();
                         attacker->GetTransform().SetRotation(glm::vec3(r.x, yaw, r.z));

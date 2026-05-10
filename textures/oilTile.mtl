@@ -1,7 +1,7 @@
-# Blender 4.5.4 LTS MTL File: 'None'
+# Blender 4.5.4 LTS MTL File: 'Battleship.blend'
 # www.blender.org
 
-newmtl Material.001
+newmtl Material.009
 Ks 0.500000 0.500000 0.500000
 Ke 0.000000 0.000000 0.000000
 Ni 1.500000
@@ -14,4 +14,4 @@ Pc 0.000000
 Pcr 0.030000
 aniso 0.000000
 anisor 0.000000
-map_Kd triangle_pattern_021.jpg
+map_Kd Tile_Textures.png

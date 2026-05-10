@@ -15,6 +15,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <map>
+#include <unordered_map>
 #include <vector>
 #include <string>
 
@@ -28,6 +29,25 @@ namespace gps {
 namespace gps {
 
     // ===========================
+    // TILE TYPES + EFFECTS
+    // ===========================
+    enum class TileType {
+        Sea = 0,    // default, no gimmick
+        Oil,        // boosts Oil extractors parked on top
+        Fish,       // boosts Fish extractors parked on top
+        Shallows,   // slows ships passing through
+        Land,       // hosts an island prop, blocks ship movement (future)
+    };
+
+    struct TileEffect {
+        float moveDurationMul = 1.0f;   // applied to ship moveDuration (>1 = slower)
+        std::string resource = "none";  // resource produced by parked extractors
+        float productionBonus = 1.0f;   // multiplier on extractor productionRate
+    };
+
+    const TileEffect& GetTileEffect(TileType t);
+
+    // ===========================
     // TILE STRUCT
     // ===========================
     struct Tile {
@@ -37,6 +57,8 @@ namespace gps {
         int sceneObjectId;      // ID-ul SceneObject-ului din Scene (NOU!)
         bool isLoaded;          // Daca e incarcat in scena
         std::string terrainType;
+
+        TileType type = TileType::Sea;
 
         Tile() : gridX(0), gridZ(0), worldPos(0.0f), sceneObjectId(-1),
             isLoaded(false), terrainType("default") {}
@@ -62,9 +84,21 @@ namespace gps {
          * @param terrainModel Modelul 3D folosit pentru tile-uri
          * @param scene Pointer la scena (pentru a crea SceneObject-uri)
          *
-         * NOTA: scene NU mai e optional - TileManager are nevoie de el
+         * NOTA: scene NU mai e optional - TileManager are nevoie de el.
+         * terrainModel este folosit ca fallback cand un TileType nu are model dedicat.
          */
         void Initialize(Model3D* terrainModel, Scene* scene);
+
+        /**
+         * @brief Inregistreaza modelul folosit pentru un anumit TileType
+         * (apelat dupa Initialize, o data per tip)
+         */
+        void RegisterTileModel(TileType type, Model3D* model);
+
+        /**
+         * @brief Atribuie procedural TileType la fiecare tile (doar cele cu type==Sea)
+         */
+        void AssignProceduralTypes(unsigned seed = 1337u);
 
         // ===========================
         // TILE CREATION / LOADING
@@ -193,7 +227,8 @@ namespace gps {
 
         std::map<GridKey, Tile> m_tiles;
         Model3D* m_terrainModel;
-        Scene* m_scene;          
+        Scene* m_scene;
+        std::unordered_map<int, Model3D*> m_typeModels; // TileType (as int) -> model
         float m_tileSize;
         glm::vec3 m_tileModelScale;
         
