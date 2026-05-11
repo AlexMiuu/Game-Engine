@@ -111,7 +111,7 @@ namespace gps {
         troop->unitStats = objectStats;
 
         // Set collision radius
-        troop->SetCollisionRadius(5.0f);
+        troop->SetCollisionRadius(25.0f);
 
         // Incrementeaz� counter
         m_troopCount++;
@@ -194,7 +194,7 @@ namespace gps {
         UnitStats objectStats = InitializeUnitsStats(obj);
         obj->unitStats = objectStats;
 
-        obj->SetCollisionRadius(5.0f);
+        obj->SetCollisionRadius(25.0f);
 
 
         std::cout << "?? Spawned object '" << name << "' (ID: " << obj->GetID() << ")" << std::endl;
@@ -430,6 +430,19 @@ namespace gps {
             stats.resourceType = "Oil";
             stats.productionRate = 5.0f;
             stats.isMovable = false;
+        }
+        else if (tag == "fishBoat")
+        {
+            stats.health = 200;
+            stats.attack = 0;
+            stats.maxHealth = 200;
+            stats.attackRange = 0.0f;
+            stats.isCombatUnit = false;
+            stats.isAlive = true;
+            stats.resourceType = "Fish";
+            stats.productionRate = 5.0f;
+            stats.isMovable = true;
+            stats.faction = 1;
         }
         else if (tag == "frigate")
         {

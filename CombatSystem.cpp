@@ -73,6 +73,10 @@ namespace gps {
             (origin->unitStats.attackMode == AttackMode::ProjectileSplash)
             ? origin->unitStats.splashRadius : 0.0f;
 
+        // CIWS rounds render red.
+        if (origin->GetTag() == "turret")
+            cannonBall->projectileData.tint = glm::vec3(1.0f, 0.15f, 0.15f);
+
         cannonBall->movement.isMoving      = true;
         cannonBall->movement.moveStartPos  = origin->GetWorldCenter();
         cannonBall->movement.moveEndPos    = target->GetWorldCenter();

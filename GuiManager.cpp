@@ -268,13 +268,21 @@ namespace gps {
                 }
             }
 
+            if (ColoredButton("Fish Boat", ImVec2(-1, 40),
+                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
+            {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement("fishBoat", "fishBoat", glm::vec3(4.5f), "FishBoat");
+                }
+            }
+
         ImGui::SeparatorText("Buildings");
 
             if (ColoredButton("Spawn CIWS", ImVec2(-1, 40),
                 ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
             {
                 if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("turret", "turret", glm::vec3(4.5f), "Turret");
+                    m_sceneManager->SetPropPlacement("turret", "turret", glm::vec3(10.5f), "Turret");
                 }
             }
 
@@ -598,11 +606,14 @@ namespace gps {
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(ID: %d)", obj->GetID());
 
                 ImGui::Separator();
-
+                
+            if(obj->unitStats.isCombatUnit==true)
+            {
                 ImGui::Text("Upgrades");
 
 				ImGui::BulletText("Attack: %d", obj->unitStats.attack);
 				ImGui::BulletText("Range: %d", obj->unitStats.attackRange);
+                
 
 
                 if (ImGui::Button("Upgrade Attack", ImVec2(120, 24)))
@@ -623,7 +634,7 @@ namespace gps {
                     std::cout << "attack value DEBUG  " << obj->unitStats.attackRange << std::endl;
                     }
                 }
-
+            }
                 ImGui::Separator();
 
                 // Position

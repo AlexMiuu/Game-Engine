@@ -77,6 +77,7 @@ namespace gps {
         int   targetID = -1;
         float damage   = 0.0f;
         float splashRadius = 0.0f; // 0 = single-target
+        glm::vec3 tint = glm::vec3(1.0f); // multiplied into fragment color; white = no tint
     };
 
     struct OrbitData {

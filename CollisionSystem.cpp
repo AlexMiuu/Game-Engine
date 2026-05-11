@@ -23,8 +23,12 @@ namespace gps {
     }
 
     bool CollisionSystem::CheckCollisions(SceneObject* mover) const {
-        if (!m_enabled || !m_scene || !mover) return false;
-        if (mover->GetCollisionRadius() <= 0.0f) return false;
+        return GetCollidingObject(mover) != nullptr;
+    }
+
+    SceneObject* CollisionSystem::GetCollidingObject(SceneObject* mover) const {
+        if (!m_enabled || !m_scene || !mover) return nullptr;
+        if (mover->GetCollisionRadius() <= 0.0f) return nullptr;
 
         for (const auto& objPtr : m_scene->GetObjects()) {
             SceneObject* other = objPtr.get();
@@ -34,11 +38,11 @@ namespace gps {
             if (other->GetCollisionRadius() <= 0.0f) continue;
 
             if (SpheresOverlap(*mover, *other)) {
-                return true;
+                return other;
             }
         }
 
-        return false;
+        return nullptr;
     }
 
     bool CollisionSystem::SpheresOverlap(const SceneObject& a, const SceneObject& b) const {

@@ -29,6 +29,7 @@ uniform bool isSelected;
 uniform vec3 highlightColor;
 uniform int objectID;
 uniform bool isGhost;
+uniform vec3 objectTint = vec3(1.0); // multiplied into the final fragment; white = no tint
 
 void computeLightComponents(out vec3 ambient, out vec3 diffuse, out vec3 specular) {
     vec3 normalEye = normalize(fNormal);
@@ -123,4 +124,5 @@ void main() {
     if (isSelected) {
         fColor = mix(fColor, vec4(highlightColor, 1.0), 0.3);
     }
+    fColor.rgb *= objectTint;
 }

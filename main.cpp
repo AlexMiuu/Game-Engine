@@ -93,6 +93,7 @@ GLint viewPosLoc;
 GLint isSelectedLoc;  // Pentru highlight
 
 GLint highlightColorLoc;
+GLint objectTintLoc;
 GLint objectIDLoc;
 GLint isGhostLoc;
 
@@ -144,6 +145,7 @@ gps::Model3D oilTile;
 gps::Model3D fishTile;
 gps::Model3D desertTile;
 gps::Model3D greenTile;
+gps::Model3D fishBoat;
 
 // ===========================
 // SKYBOX
@@ -225,6 +227,7 @@ void renderShadowMap();
 void renderSkyBox();
 void initRangeCircle();
 void renderRangeCircles();
+void renderDebugBounds();
 
 glm::vec3 screenToWorld(const glm::vec2& screenPos);
 
@@ -635,13 +638,14 @@ void initModels() {
     islandT.LoadModel("objects/islandT/islandT.obj","textures/");
     aircraft.LoadModel("objects/aircraft/aircraft.obj","textures/");
     aircraftCarrier.LoadModel("objects/aircraftCarrier/AircraftCarrier.obj","textures/");
-    turret.LoadModel("objects/turret/Turret.obj", "textures/");
+    turret.LoadModel("objects/tiles/ciws.obj", "textures/");
     projectile.LoadModel("objects/projectile/Projectile.obj", "textures/");
     waterTile.LoadModel("objects/tiles/waterTile.obj", "textures/");
     oilTile.LoadModel("objects/tiles/oilTile.obj", "textures/");
     fishTile.LoadModel("objects/tiles/fishTile.obj", "textures/");
     desertTile.LoadModel("objects/tiles/desertTile.obj", "textures/");
     greenTile.LoadModel("objects/tiles/greenTile.obj", "textures/");
+    fishBoat.LoadModel("objects/tiles/fishBoat.obj", "textures/");
 
     std::cout << "✅ Models loaded" << std::endl;
 }
@@ -669,6 +673,7 @@ void initUniforms() {
     viewPosLoc = glGetUniformLocation(myCustomShader.shaderProgram, "viewPos");
     isSelectedLoc = glGetUniformLocation(myCustomShader.shaderProgram, "isSelected");
     highlightColorLoc = glGetUniformLocation(myCustomShader.shaderProgram, "highlightColor");
+    objectTintLoc     = glGetUniformLocation(myCustomShader.shaderProgram, "objectTint");
     objectIDLoc = glGetUniformLocation(myCustomShader.shaderProgram, "objectID");
     isGhostLoc = glGetUniformLocation(myCustomShader.shaderProgram, "isGhost");
 
@@ -747,6 +752,7 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("aircraftCarrier",&aircraftCarrier);
     g_sceneManager->RegisterModel("turret", &turret);
     g_sceneManager->RegisterModel("projectile", &projectile);
+    g_sceneManager->RegisterModel("fishBoat", &fishBoat);
 
     g_tileManager.Initialize(&waterTile, g_scene);
     g_tileManager.RegisterTileModel(gps::TileType::Sea,      &waterTile);
@@ -866,6 +872,71 @@ void renderRangeCircles() {
         glUniform4fv(circleColorLoc, 1, glm::value_ptr(color));
 
         glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+    }
+
+    glBindVertexArray(0);
+    glLineWidth(1.0f);
+    glDisable(GL_BLEND);
+}
+
+// Visualize collision spheres (red) and bounding spheres (cyan) for every active
+// scene object — driven by the two checkboxes in the Debug panel. Reuses the
+// range-circle VAO and shader; renders three orthogonal great circles per object
+// so the sphere reads correctly from any camera angle.
+void renderDebugBounds() {
+    if (!g_guiManager || !g_scene) return;
+    const bool showColl   = g_guiManager->showCollisionBoxes;
+    const bool showBounds = g_guiManager->showBoundingSpheres;
+    if (!showColl && !showBounds) return;
+    if (g_circleVAO == 0) return;
+
+    rangeCircleShader.useShaderProgram();
+    glm::mat4 view = myCamera.getViewMatrix();
+    glUniformMatrix4fv(circleViewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(circleProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glLineWidth(1.5f);
+    glBindVertexArray(g_circleVAO);
+
+    auto drawSphere = [&](const glm::vec3& center, float radius, const glm::vec4& color) {
+        glUniform4fv(circleColorLoc, 1, glm::value_ptr(color));
+        const glm::mat4 base = glm::translate(glm::mat4(1.0f), center);
+        const glm::vec3 s(radius, 1.0f, radius);
+
+        // XZ plane (default circle vertices live in XZ)
+        glm::mat4 m = glm::scale(base, s);
+        glUniformMatrix4fv(circleModelLoc, 1, GL_FALSE, glm::value_ptr(m));
+        glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+
+        // XY plane: rotate the XZ ring 90° around the X axis
+        m = glm::scale(glm::rotate(base, glm::half_pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f)), s);
+        glUniformMatrix4fv(circleModelLoc, 1, GL_FALSE, glm::value_ptr(m));
+        glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+
+        // YZ plane: rotate the XZ ring 90° around the Z axis
+        m = glm::scale(glm::rotate(base, glm::half_pi<float>(), glm::vec3(0.0f, 0.0f, 1.0f)), s);
+        glUniformMatrix4fv(circleModelLoc, 1, GL_FALSE, glm::value_ptr(m));
+        glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+    };
+
+    const glm::vec4 collColor   (1.0f, 0.25f, 0.25f, 0.9f); // red
+    const glm::vec4 boundsColor (0.25f, 0.9f, 1.0f, 0.7f);  // cyan
+
+    for (const auto& objPtr : g_scene->GetObjects()) {
+        gps::SceneObject* obj = objPtr.get();
+        if (!obj || !obj->IsActive()) continue;
+        // Skip terrain tiles — their giant spheres drown out the rest.
+        if (obj->GetTag() == "tile") continue;
+
+        const glm::vec3 center = obj->GetWorldCenter();
+
+        if (showColl && obj->GetCollisionRadius() > 0.0f)
+            drawSphere(center, obj->GetCollisionRadius(), collColor);
+
+        if (showBounds && obj->GetWorldRadius() > 0.0f)
+            drawSphere(center, obj->GetWorldRadius(), boundsColor);
     }
 
     glBindVertexArray(0);
@@ -1008,6 +1079,15 @@ void renderScene(gps::Shader shader) {
                 : glm::vec3(1.0f, 1.0f, 0.0f);   // Yellow for play mode
             glUniform3fv(highlightColorLoc, 1, glm::value_ptr(hlColor));
         }
+
+        // Per-object tint (e.g. red CIWS rounds)
+        if (objectTintLoc != -1) {
+            glm::vec3 tint = obj->projectileData.isProjectile
+                ? obj->projectileData.tint
+                : glm::vec3(1.0f);
+            glUniform3fv(objectTintLoc, 1, glm::value_ptr(tint));
+        }
+
         // Draw
         obj->GetModel()->Draw(shader);
     }
@@ -1280,11 +1360,51 @@ int main(int argc, const char* argv[]) {
 
             obj->UpdateWorldBounds();
 
-            // Collision check: revert and stop if colliding (skip for projectiles)
-            if (g_collisionSystem && !obj->projectileData.isProjectile && g_collisionSystem->CheckCollisions(obj)) {
-                obj->GetTransform().SetPosition(oldPos);
-                obj->UpdateWorldBounds();
-                obj->movement.isMoving = false;
+            // Land tiles block ships: revert and halt at the boundary.
+            if (!obj->projectileData.isProjectile) {
+                int gx, gz;
+                g_tileManager.WorldToGrid(newPos, gx, gz);
+                if (gps::Tile* t = g_tileManager.GetTile(gx, gz)) {
+                    if (t->type == gps::TileType::Land) {
+                        obj->GetTransform().SetPosition(oldPos);
+                        obj->movement.isMoving = false;
+                        obj->UpdateWorldBounds();
+                        continue;
+                    }
+                }
+            }
+
+            // Sphere-sphere collisions: slide along the contact instead of locking up.
+            if (g_collisionSystem && !obj->projectileData.isProjectile) {
+                gps::SceneObject* other = g_collisionSystem->GetCollidingObject(obj);
+                if (other) {
+                    glm::vec3 n = obj->GetWorldCenter() - other->GetWorldCenter();
+                    n.y = 0.0f;
+                    float nl = glm::length(n);
+                    if (nl > 0.0001f) {
+                        n /= nl;
+                        glm::vec3 move = newPos - oldPos;
+                        glm::vec3 slide = move - glm::dot(move, n) * n;
+                        glm::vec3 slidePos = oldPos + slide;
+                        obj->GetTransform().SetPosition(slidePos);
+                        obj->UpdateWorldBounds();
+                        if (g_collisionSystem->GetCollidingObject(obj)) {
+                            // Slide didn't free us — fall back to halting.
+                            obj->GetTransform().SetPosition(oldPos);
+                            obj->UpdateWorldBounds();
+                            obj->movement.isMoving = false;
+                        } else {
+                            // Re-anchor the move so we continue toward the goal from here.
+                            obj->movement.moveStartPos  = slidePos;
+                            obj->movement.moveStartTime = static_cast<float>(currentTime);
+                        }
+                    } else {
+                        // Centers coincide — degenerate, halt.
+                        obj->GetTransform().SetPosition(oldPos);
+                        obj->UpdateWorldBounds();
+                        obj->movement.isMoving = false;
+                    }
+                }
             }
         }
 
@@ -1395,6 +1515,9 @@ int main(int argc, const char* argv[]) {
 
         // Render range circles for selected combat units
         renderRangeCircles();
+
+        // Debug overlay: collision spheres / model bounds (toggled in Debug panel)
+        renderDebugBounds();
 
         // Render skybox
         renderSkyBox();

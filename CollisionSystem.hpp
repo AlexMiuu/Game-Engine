@@ -29,6 +29,12 @@ namespace gps {
          */
         bool CheckCollisions(SceneObject* mover) const;
 
+        /**
+         * @brief Like CheckCollisions, but returns the first overlapping object so
+         *        callers can compute a contact normal for slide/push response.
+         */
+        SceneObject* GetCollidingObject(SceneObject* mover) const;
+
         void SetEnabled(bool enabled) { m_enabled = enabled; }
         bool IsEnabled() const { return m_enabled; }
 
