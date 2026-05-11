@@ -322,8 +322,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         if (g_sceneManager && resourceManager.Get("Oil") >= 50) {
             glm::vec3 worldPos = screenToWorld(mousePos);
 
-            resourceManager.Spend("Oil", 50);
-
             glm::vec3 gridMin, gridMax;
             if (g_tileManager.GetGridBounds(gridMin, gridMax)) {
                 worldPos.x = glm::clamp(worldPos.x, gridMin.x, gridMax.x);
@@ -339,7 +337,16 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                 g_sceneManager->m_propPlacementScale
             );
 
+            // Reject the placement if the new object overlaps anything collidable.
+            if (spawned && g_collisionSystem && g_collisionSystem->GetCollidingObject(spawned)) {
+                std::cout << "Placement blocked: overlaps another object" << std::endl;
+                g_scene->DestroyObject(spawned->GetID());
+                spawned = nullptr;
+                return;
+            }
+
             if (spawned) {
+                resourceManager.Spend("Oil", 50);
                 std::cout << "Placed " << g_sceneManager->m_propPlacementLabel << " at ("
                     << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
 
@@ -1266,12 +1273,18 @@ int main(int argc, const char* argv[]) {
                 const gps::UnitStats& s = obj->unitStats;
                 if (s.productionRate > 0.0f && !s.resourceType.empty() && s.resourceType != "none") {
                     float bonus = 1.0f;
+                    bool onMatchingTile = false;
                     int gx, gz;
                     g_tileManager.WorldToGrid(obj->GetTransform().GetPosition(), gx, gz);
                     if (gps::Tile* t = g_tileManager.GetTile(gx, gz)) {
                         const gps::TileEffect& e = gps::GetTileEffect(t->type);
-                        if (e.resource == s.resourceType) bonus = e.productionBonus;
+                        if (e.resource == s.resourceType) {
+                            bonus = e.productionBonus;
+                            onMatchingTile = true;
+                        }
                     }
+                    // Fish boats only generate fish when parked on a Fish tile.
+                    if (obj->GetTag() == "fishBoat" && !onMatchingTile) continue;
                     gps::ResourceManager::Instance().Deposit(s.resourceType, s.productionRate * bonus * deltaTime);
                 }
             }
@@ -1377,6 +1390,13 @@ int main(int argc, const char* argv[]) {
             // Sphere-sphere collisions: slide along the contact instead of locking up.
             if (g_collisionSystem && !obj->projectileData.isProjectile) {
                 gps::SceneObject* other = g_collisionSystem->GetCollidingObject(obj);
+                // Same-faction movable units phase through each other so troops
+                // don't deadlock when they brush past one another.
+                if (other && other->unitStats.isMovable
+                          && obj->unitStats.faction != 0
+                          && obj->unitStats.faction == other->unitStats.faction) {
+                    other = nullptr;
+                }
                 if (other) {
                     glm::vec3 n = obj->GetWorldCenter() - other->GetWorldCenter();
                     n.y = 0.0f;
