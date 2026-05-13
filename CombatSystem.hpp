@@ -35,6 +35,8 @@ namespace gps {
 
         void SetSceneManager(SceneManager* sm) { m_sceneManager = sm; }
 
+        // God-power bombardment: drops one large AOE projectile from the sky on the given world point.
+        void SpawnBombardment(const glm::vec3& targetWorldPos, int attackerFaction);
 
     private:
         Scene* m_scene  = nullptr;

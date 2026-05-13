@@ -75,7 +75,7 @@ double       lastFPressTime     = -10.0;
 
 // Oil cost for placing a prop. Mirrored in GuiManager.cpp for the spawn-panel
 // disabled state and cost label.
-constexpr float kPropPlacementOilCost = 50.0f;
+constexpr float kPropPlacementOilCost = 10.0f;
 
 // ===========================
 // SHADERS
@@ -343,6 +343,20 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     }
 
     // ========== PLAY MODE INPUT (existing code) ==========
+
+    // Bombardment ability: left-click finalizes the strike, deducts Oil, and lets
+    // CombatSystem drop one big AOE projectile from the sky on the clicked point.
+    if (g_sceneManager->m_bombardmentTargeting){
+
+    }
+    if (g_sceneManager->m_bombardmentTargeting && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        g_sceneManager->m_bombardmentTargeting = false;
+        if (resourceManager.Spend("Oil", 75.0f)) {
+            glm::vec3 target = screenToWorld(mousePos);
+            if (g_combatSystem) g_combatSystem->SpawnBombardment(target, 1 /* player faction */);
+        }
+        return;
+    }
 
     // Placement mode: left click places selected prop and skips selection box logic.
     if (g_sceneManager->m_propPlacementMode && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
@@ -879,8 +893,7 @@ void initRangeCircle() {
 }
 
 void renderRangeCircles() {
-    if (!g_scene || !g_selectionSystem || !g_selectionSystem->HasSelection()) return;
-    if (g_circleVAO == 0) return;
+    if (!g_scene || !g_selectionSystem || g_circleVAO == 0) return;
 
     rangeCircleShader.useShaderProgram();
 
@@ -893,6 +906,21 @@ void renderRangeCircles() {
     glLineWidth(2.0f);
 
     glBindVertexArray(g_circleVAO);
+
+    if (g_sceneManager && g_sceneManager->m_bombardmentTargeting) {
+        glm::vec3 pos = screenToWorld(gps::InputManager::Instance().GetMousePosition());
+        pos.y += 2.0f; 
+        float aoeRadius = 40.0f;
+        glm::mat4 model = glm::scale(
+            glm::translate(glm::mat4(1.0f), pos),
+            glm::vec3(aoeRadius, 1.0f, aoeRadius)
+        );
+        glUniformMatrix4fv(circleModelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        glm::vec4 color = glm::vec4(1.0f, 0.5f, 0.0f, 0.8f); // orange
+        glUniform4fv(circleColorLoc, 1, glm::value_ptr(color));
+        glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+    }
+
 
     for (int id : g_selectionSystem->GetSelectedIDs()) {
         gps::SceneObject* obj = g_scene->GetObjectByID(id);
@@ -1029,8 +1057,18 @@ void processMovement() {
         dragHasPrev = true;
     }
 
-    // Smooth zoom (ease toward target).
+    // Smooth zoom (ease toward target). Rebuild the ortho projection so the
+    // change is visible — the per-frame uniform upload reads this matrix.
     zoomFactor += (targetZoomFactor - zoomFactor) * std::min(1.0f, deltaTime * 10.0f);
+    {
+        float aspectRatio = static_cast<float>(retina_width) / static_cast<float>(retina_height);
+        float orthoSize   = 150.0f * zoomFactor;
+        projection = glm::ortho(
+            -orthoSize * aspectRatio, orthoSize * aspectRatio,
+            -orthoSize, orthoSize,
+            -1000.0f, 1000.0f
+        );
+    }
 
     // F-focus seek toward selection centroid.
     if (cameraSeeking) {

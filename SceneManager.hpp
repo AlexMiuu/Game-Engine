@@ -220,6 +220,8 @@ namespace gps {
         std::string m_propPlacementLabel;
         bool m_propPlacementMode=false;
 
+        bool m_bombardmentTargeting = false;
+
     private:
         // Scene reference
         Scene* m_scene;

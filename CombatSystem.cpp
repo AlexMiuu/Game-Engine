@@ -85,6 +85,42 @@ namespace gps {
         cannonBall->movement.moveDuration  = static_cast<float>(fuseTime);
     }
 
+    void CombatSystem::SpawnBombardment(const glm::vec3& target, int attackerFaction) {
+        if (!m_sceneManager || !m_scene) return;
+
+        // Borrow any living unit of the right faction as the projectile's owner so the
+        // existing AOE friendly-fire filter at main.cpp picks up the correct faction
+        // without needing a new field on ProjectileData.
+        int ownerID = -1;
+        for (const auto& objPtr : m_scene->GetObjects()) {
+            const UnitStats& s = objPtr->unitStats;
+            if (s.faction == attackerFaction && s.isAlive) { ownerID = objPtr->GetID(); break; }
+        }
+
+        glm::vec3 spawn = target + glm::vec3(0.0f, 300.0f, 0.0f);
+
+        for(int i=0;i<8;i++)
+        {
+            glm::vec3 spawn = target + glm::vec3(rand() % 60 - 40, 300.0f, rand() % 60 - 40);
+            SceneObject* bomb = m_sceneManager->SpawnObject(
+            "Bombardment", "projectile", "projectile", spawn, glm::vec3(12.0f));
+        if (!bomb) return;
+
+        bomb->projectileData.isProjectile = true;
+        bomb->projectileData.ownerID      = ownerID;
+        bomb->projectileData.damage       = 200.0f;
+        bomb->projectileData.splashRadius = 40.0f;
+        bomb->projectileData.tint         = glm::vec3(1.0f, 0.5f, 0.2f);
+
+        bomb->movement.isMoving      = true;
+        bomb->movement.moveStartPos  = spawn;
+        bomb->movement.moveEndPos    = target;
+        bomb->movement.moveDirection = glm::vec3(0.0f, -1.0f, 0.0f);
+        bomb->movement.moveStartTime = (float)glfwGetTime();
+        bomb->movement.moveDuration  = 3.75f;
+        }
+    }
+
     void CombatSystem::Update(float deltaTime) {
         if (!m_scene || !m_enabled) return;
 

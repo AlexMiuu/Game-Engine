@@ -457,6 +457,14 @@ namespace gps {
         }
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Hotkey: C");
 
+        // ─── ABILITIES ───
+        ImGui::SeparatorText("Abilities");
+
+        if (ColoredButton("Bombardment (75 Oil)", ImVec2(-1, 40),
+                ImVec4(0.8f, 0.25f, 0.1f, 1.0f), ImVec4(1.0f, 0.35f, 0.15f, 1.0f))) {
+            if (m_sceneManager) m_sceneManager->m_bombardmentTargeting = true;
+        }
+
         // ─── TILE GRID ───
         if (m_tileManager) {
             ImGui::SeparatorText("Tile Grid");
