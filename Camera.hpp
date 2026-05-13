@@ -25,7 +25,11 @@ namespace gps {
         glm::mat4 getProjectionMatrix(float left, float right, float bottom, float top, float near, float far);
 
         glm::vec3 getCameraPosition() const { return cameraPosition; }
+        glm::vec3 getCameraTarget()   const { return cameraTarget; }
 
+        // Translate position and target so the camera looks at the given world point.
+        // Look direction (and elevation) are preserved.
+        void centerOn(const glm::vec3& worldPoint);
 
         glm::vec3 getCameraFrontDirection() const { return cameraFrontDirection; }
 

@@ -6,6 +6,7 @@
 #include <iostream>
 #include <cmath>
 #include <string>
+#include <algorithm>
 
 // OpenGL/GLFW/GLEW
 #if defined (__APPLE__)
@@ -62,6 +63,19 @@ gps::Camera myCamera(
 
 float cameraSpeed = 150.0f;
 float zoomFactor = 1.0f;
+
+// Camera smoothing / interaction state (driven by processMovement).
+float        targetZoomFactor   = 1.0f;
+bool         cameraSeeking      = false;   // F-focus seek in progress
+glm::vec3    cameraSeekTargetXZ = glm::vec3(0.0f);
+bool         middleDragging     = false;
+bool         dragHasPrev        = false;
+glm::vec3    dragPrevWorld      = glm::vec3(0.0f);
+double       lastFPressTime     = -10.0;
+
+// Oil cost for placing a prop. Mirrored in GuiManager.cpp for the spawn-panel
+// disabled state and cost label.
+constexpr float kPropPlacementOilCost = 50.0f;
 
 // ===========================
 // SHADERS
@@ -275,6 +289,19 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     // Forward către InputManager
     gps::InputManager::Instance().OnMouseButton(button, action, mods);
 
+    // Middle-mouse drag-to-pan camera. Always tracked (even over ImGui release),
+    // so a release that lands over a panel still ends the drag cleanly.
+    if (button == GLFW_MOUSE_BUTTON_MIDDLE) {
+        if (action == GLFW_PRESS && !(g_guiManager && g_guiManager->WantsMouseInput())) {
+            middleDragging = true;
+            dragHasPrev    = false;
+        } else if (action == GLFW_RELEASE) {
+            middleDragging = false;
+            dragHasPrev    = false;
+        }
+        return;
+    }
+
     if (g_guiManager && g_guiManager->WantsMouseInput()) {
         return;
     }
@@ -319,7 +346,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
     // Placement mode: left click places selected prop and skips selection box logic.
     if (g_sceneManager->m_propPlacementMode && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        if (g_sceneManager && resourceManager.Get("Oil") >= 50) {
+        if (g_sceneManager && resourceManager.Get("Oil") >= kPropPlacementOilCost) {
             glm::vec3 worldPos = screenToWorld(mousePos);
 
             glm::vec3 gridMin, gridMax;
@@ -345,8 +372,20 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                 return;
             }
 
+            int gx, gz;
+            g_tileManager.WorldToGrid(spawned->GetTransform().GetPosition(), gx, gz);
+            bool matchingTile = false;     
+            
+            if (gps::Tile* t = g_tileManager.GetTile(gx, gz)) {
+                if(t->type != gps::TileType::Land && spawned->GetTag() == "turret") {
+                        g_scene->DestroyObject(spawned->GetID());
+                        spawned = nullptr;
+                         return;
+                }
+            }
+            
             if (spawned) {
-                resourceManager.Spend("Oil", 50);
+                resourceManager.Spend("Oil", kPropPlacementOilCost);
                 std::cout << "Placed " << g_sceneManager->m_propPlacementLabel << " at ("
                     << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
 
@@ -511,12 +550,12 @@ void cursorPositionCallback(GLFWwindow* window, double xpos, double ypos) {
 void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
     gps::InputManager::Instance().OnMouseScroll(xoffset, yoffset);
 
-    // Zoom
-    zoomFactor *= (1.0f - static_cast<float>(yoffset) * 0.1f);
-    zoomFactor = glm::clamp(zoomFactor, 0.5f, 2.0f);
+    // Don't react to scroll while a panel is hovered/focused.
+    if (g_guiManager && g_guiManager->WantsMouseInput()) return;
 
-    // Update projection
-    windowResizeCallback(window, glWindowWidth, glWindowHeight);
+    // Push a new target; the actual zoomFactor eases toward it in processMovement.
+    targetZoomFactor *= (1.0f - static_cast<float>(yoffset) * 0.1f);
+    targetZoomFactor = glm::clamp(targetZoomFactor, 0.5f, 2.0f);
 }
 
 //
@@ -957,23 +996,81 @@ void renderDebugBounds() {
 
 void processMovement() {
     auto& input = gps::InputManager::Instance();
+    const bool wantsKbd   = g_guiManager && g_guiManager->WantsKeyboardInput();
+    const bool wantsMouse = g_guiManager && g_guiManager->WantsMouseInput();
 
-    if (g_guiManager && g_guiManager->WantsKeyboardInput()) return;
+    // ---- Mouse-driven camera (runs regardless of keyboard focus / pause) ----
 
+    // Edge-of-screen pan
+    if (!wantsMouse) {
+        glm::vec2 m = input.GetMousePosition();
+        const float edge = 20.0f;
+        const float es = cameraSpeed * deltaTime;
+        if (m.x >= 0.0f && m.x < edge)
+            myCamera.move(gps::MOVE_LEFT, es);
+        else if (m.x > glWindowWidth - edge && m.x <= glWindowWidth)
+            myCamera.move(gps::MOVE_RIGHT, es);
+        if (m.y >= 0.0f && m.y < edge)
+            myCamera.move(gps::MOVE_UP, es);
+        else if (m.y > glWindowHeight - edge && m.y <= glWindowHeight)
+            myCamera.move(gps::MOVE_DOWN, es);
+    }
 
-    // Camera movement
-    if (input.IsKeyPressed(GLFW_KEY_W)) {
-        myCamera.move(gps::MOVE_UP, cameraSpeed * deltaTime);
+    // Middle-mouse drag pan — the world point under the cursor stays glued to it.
+    if (middleDragging) {
+        glm::vec3 cur = screenToWorld(input.GetMousePosition());
+        if (dragHasPrev) {
+            glm::vec3 worldDelta = cur - dragPrevWorld;
+            glm::vec3 t = myCamera.getCameraTarget() - worldDelta;
+            myCamera.centerOn(t);
+        }
+        // Resample after potentially moving the camera so we track incremental drag.
+        dragPrevWorld = screenToWorld(input.GetMousePosition());
+        dragHasPrev = true;
     }
-    if (input.IsKeyPressed(GLFW_KEY_S)) {
-        myCamera.move(gps::MOVE_DOWN, cameraSpeed * deltaTime);
+
+    // Smooth zoom (ease toward target).
+    zoomFactor += (targetZoomFactor - zoomFactor) * std::min(1.0f, deltaTime * 10.0f);
+
+    // F-focus seek toward selection centroid.
+    if (cameraSeeking) {
+        glm::vec3 cur = myCamera.getCameraTarget();
+        glm::vec3 goal(cameraSeekTargetXZ.x, cur.y, cameraSeekTargetXZ.z);
+        glm::vec3 next = cur + (goal - cur) * std::min(1.0f, deltaTime * 6.0f);
+        myCamera.centerOn(next);
+        if (glm::length(goal - next) < 0.5f) cameraSeeking = false;
     }
-    if (input.IsKeyPressed(GLFW_KEY_A)) {
-        myCamera.move(gps::MOVE_LEFT, cameraSpeed * deltaTime);
+
+    // Minimap click teleport (sets a fresh seek goal).
+    if (g_guiManager) {
+        glm::vec3 mp;
+        if (g_guiManager->ConsumeMinimapClick(mp)) {
+            cameraSeekTargetXZ = mp;
+            cameraSeeking = true;
+        }
     }
-    if (input.IsKeyPressed(GLFW_KEY_D)) {
-        myCamera.move(gps::MOVE_RIGHT, cameraSpeed * deltaTime);
+
+    // Clamp camera target to the tile grid so we can't pan into empty space.
+    {
+        glm::vec3 gMin, gMax;
+        if (g_tileManager.GetGridBounds(gMin, gMax)) {
+            glm::vec3 t = myCamera.getCameraTarget();
+            glm::vec3 c = t;
+            c.x = glm::clamp(t.x, gMin.x, gMax.x);
+            c.z = glm::clamp(t.z, gMin.z, gMax.z);
+            if (c.x != t.x || c.z != t.z) myCamera.centerOn(c);
+        }
     }
+
+    // ---- Keyboard input (suppressed while ImGui has keyboard focus) ----
+    if (wantsKbd) return;
+
+    bool wasdHeld = false;
+    if (input.IsKeyPressed(GLFW_KEY_W)) { myCamera.move(gps::MOVE_UP,    cameraSpeed * deltaTime); wasdHeld = true; }
+    if (input.IsKeyPressed(GLFW_KEY_S)) { myCamera.move(gps::MOVE_DOWN,  cameraSpeed * deltaTime); wasdHeld = true; }
+    if (input.IsKeyPressed(GLFW_KEY_A)) { myCamera.move(gps::MOVE_LEFT,  cameraSpeed * deltaTime); wasdHeld = true; }
+    if (input.IsKeyPressed(GLFW_KEY_D)) { myCamera.move(gps::MOVE_RIGHT, cameraSpeed * deltaTime); wasdHeld = true; }
+    if (wasdHeld) cameraSeeking = false; // user took manual control, cancel focus seek
 
     if (input.IsKeyJustPressed(GLFW_KEY_F1)) {
         if (g_guiManager) {
@@ -981,13 +1078,44 @@ void processMovement() {
         }
     }
 
-    /*
+    // F2 — alias for the help overlay (same as H).
     if (input.IsKeyJustPressed(GLFW_KEY_F2)) {
-        if (g_guiManager) {
-            g_guiManager->SetControlPanelVisible(!g_guiManager->IsControlPanelVisible());
-        }
+        if (g_guiManager) g_guiManager->ToggleHelpOverlay();
     }
-*/
+
+    // H — toggle hotkey legend.
+    if (input.IsKeyJustPressed(GLFW_KEY_H)) {
+        if (g_guiManager) g_guiManager->ToggleHelpOverlay();
+    }
+
+    // P — pause / resume.
+    if (input.IsKeyJustPressed(GLFW_KEY_P)) {
+        if (g_guiManager) g_guiManager->TogglePaused();
+    }
+
+    // F — single press records time; second press within 0.3s frames the selection.
+    if (input.IsKeyJustPressed(GLFW_KEY_F)) {
+        double now = glfwGetTime();
+        if (now - lastFPressTime < 0.3) {
+            if (g_selectionSystem && g_scene) {
+                const auto& ids = g_selectionSystem->GetSelectedIDs();
+                if (!ids.empty()) {
+                    glm::vec3 sum(0.0f);
+                    int n = 0;
+                    for (int id : ids) {
+                        gps::SceneObject* o = g_scene->GetObjectByID(id);
+                        if (o) { sum += o->GetTransform().GetPosition(); n++; }
+                    }
+                    if (n > 0) {
+                        cameraSeekTargetXZ = sum / (float)n;
+                        cameraSeeking = true;
+                    }
+                }
+            }
+        }
+        lastFPressTime = now;
+    }
+
     // Spawn trupe
     if (input.IsKeyJustPressed(GLFW_KEY_B)) {
         glm::vec3 spawnPos = g_sceneManager->GetTroopSpawnPosition();
@@ -1264,7 +1392,9 @@ int main(int argc, const char* argv[]) {
         }
 
         // ========== PLAY MODE ONLY SYSTEMS ==========
-        if (!g_editorState || g_editorState->IsPlayMode()) {
+        // Skipped while paused so combat/movement/production all freeze.
+        const bool paused = g_guiManager && g_guiManager->IsPaused();
+        if (!paused && (!g_editorState || g_editorState->IsPlayMode())) {
 
         // Resource production (with tile bonus when extractor is parked on a matching tile)
         if (g_scene) {

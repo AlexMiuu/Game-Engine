@@ -66,6 +66,10 @@ namespace gps {
         void RenderDebugPanel();
         void RenderSpawnPanel();
         void RenderInspectorPanel();
+        void RenderHelpOverlay();
+        void RenderMinimap();
+        void RenderPauseOverlay();
+        void RenderGameStateOverlay();
 
         // Editor state
         void BindEditorState(EditorState* editorState) { m_editorState = editorState; }
@@ -83,6 +87,19 @@ namespace gps {
         // Panel toggles
         void SetDebugPanelVisible(bool v) { m_showDebugPanel = v; }
         bool IsDebugPanelVisible() const { return m_showDebugPanel; }
+
+        void ToggleHelpOverlay() { m_showHelp = !m_showHelp; }
+        bool IsHelpOverlayVisible() const { return m_showHelp; }
+
+        void TogglePaused() { m_paused = !m_paused; }
+        bool IsPaused() const { return m_paused; }
+
+        void SetVictory(bool v) { m_victory = v; }
+        void SetDefeat(bool v)  { m_defeat = v; }
+
+        // Returns true and writes a world point (Y=0) when the user clicked the minimap
+        // this frame, so the camera can be teleported. False otherwise.
+        bool ConsumeMinimapClick(glm::vec3& outWorldPoint);
 
         // Mouse/keyboard capture
         bool WantsMouseInput() const;
@@ -133,6 +150,16 @@ namespace gps {
         int m_tileModelScale;
 
         int heightTile;
+
+        // New overlays / game state
+        bool m_showHelp;
+        bool m_paused;
+        bool m_victory;
+        bool m_defeat;
+
+        // Minimap click teleport — set in RenderMinimap, drained by main loop
+        bool      m_minimapClickPending;
+        glm::vec3 m_minimapClickWorldPoint;
     };
 
 } // namespace gps

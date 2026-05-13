@@ -12,19 +12,11 @@ namespace gps {
         cameraRightDirection = glm::normalize(glm::cross(cameraFrontDirection, cameraUpDirection));
     }
 
-    // Return the isometric view matrix
+    // Return the isometric view matrix.
+    // The 45 deg elevation tilt comes from the camera's initial position
+    // (typically (0, 200, -200) looking at the origin), not from any post-rotation.
     glm::mat4 Camera::getViewMatrix()  const {
-        // Create the view matrix with RTS-style isometric angles
-        glm::mat4 view = glm::lookAt(cameraPosition, cameraTarget, cameraUpDirection);
-
-        // Apply RTS-style rotation (45 degrees around Y, 60 degrees around X)
-        //float rtsAngleX =  60.0f;  // More top-down view typical for RTS games
-        //float rtsAngleY = 45.0f;  // Standard 45-degree rotation
-
-        //view = glm::rotate(view, glm::radians(rtsAngleX), glm::vec3(1.0f, 0.0f, 0.0f));
-        //view = glm::rotate(view, glm::radians(rtsAngleY), glm::vec3(0.0f, 1.0f, 0.0f));
-
-        return view;
+        return glm::lookAt(cameraPosition, cameraTarget, cameraUpDirection);
     }
 
     // Return the orthographic projection matrix
@@ -32,13 +24,12 @@ namespace gps {
         return glm::ortho(left, right, bottom, top, near, far);
     }
 
-    glm::vec3 getCameraPosition(){ 
-
-        glm::vec3 cameraPos = getCameraPosition();
-
-        return cameraPos;
+    void Camera::centerOn(const glm::vec3& worldPoint) {
+        glm::vec3 delta = worldPoint - cameraTarget;
+        delta.y = 0.0f;
+        cameraPosition += delta;
+        cameraTarget   += delta;
     }
-
 
     // Move the camera in 2D space
     void Camera::move(MOVE_DIRECTION direction, float speed) {

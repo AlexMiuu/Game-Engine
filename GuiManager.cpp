@@ -7,12 +7,17 @@
 #include "EditorState.hpp"
 #include "Scene.hpp"
 #include "SceneManager.hpp"
+#include "SceneObject.hpp"
 #include "SelectionSystem.hpp"
 #include "TileManager.hpp"
 #include "ResourceManager.hpp"
 #include <iostream>
 #include <cstring>
 #include <algorithm>
+
+// Oil cost for placing a prop via the spawn panel. Mirrors main.cpp; kept here
+// so the spawn buttons can grey out and surface the price.
+static constexpr float kPropPlacementOilCost = 50.0f;
 
 namespace gps {
 
@@ -33,6 +38,12 @@ namespace gps {
         , m_tileSize(256)
         , m_tileModelScale(27)
         , heightTile(-60.0f)
+        , m_showHelp(false)
+        , m_paused(false)
+        , m_victory(false)
+        , m_defeat(false)
+        , m_minimapClickPending(false)
+        , m_minimapClickWorldPoint(0.0f)
     {
         memset(m_fpsHistory, 0, sizeof(m_fpsHistory));
     }
@@ -104,9 +115,20 @@ namespace gps {
             RenderSpawnPanel();
             RenderCommandPanel();
             RenderUnitInfoPanel();
+            RenderMinimap();
         }
 
         if (m_showDebugPanel) RenderDebugPanel();
+        if (m_showHelp)       RenderHelpOverlay();
+        if (m_paused)         RenderPauseOverlay();
+        if (m_victory || m_defeat) RenderGameStateOverlay();
+    }
+
+    bool GuiManager::ConsumeMinimapClick(glm::vec3& outWorldPoint) {
+        if (!m_minimapClickPending) return false;
+        outWorldPoint = m_minimapClickWorldPoint;
+        m_minimapClickPending = false;
+        return true;
     }
 
     // ===========================
@@ -207,86 +229,65 @@ namespace gps {
     }
 
     void GuiManager::RenderSpawnPanel(){
-        ImGuiViewport* viewport = ImGui::GetMainViewport();
-
-        float panelWidth = 280.0f;
-        float panelHeight = 620.0f;
-        float margin = 10.0f;
-        
         ImGui::SetNextWindowPos(ImVec2(10, 45), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(280, 400), ImGuiCond_FirstUseEver);
-
+        ImGui::SetNextWindowSize(ImVec2(280, 480), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Spawn Units", nullptr);
-        
+
+        const float oil  = gps::ResourceManager::Instance().Get("Oil");
+        const bool  poor = oil < kPropPlacementOilCost;
+
+        auto spawnEntry = [&](const char* label, const char* tooltip,
+                              const std::string& model, const std::string& tag,
+                              float scale, const std::string& displayName,
+                              ImVec4 base, ImVec4 hover)
+        {
+            if (poor) ImGui::BeginDisabled();
+            char fullLabel[96];
+            snprintf(fullLabel, sizeof(fullLabel), "%s\n(%.0f Oil)", label, kPropPlacementOilCost);
+            if (ColoredButton(fullLabel, ImVec2(-1, 44), base, hover)) {
+                if (m_sceneManager) {
+                    m_sceneManager->SetPropPlacement(model, tag, glm::vec3(scale), displayName);
+                }
+            }
+            if (poor) ImGui::EndDisabled();
+            if (ImGui::IsItemHovered()) {
+                ImGui::SetTooltip("%s\nCost: %.0f Oil\nLeft-click on the map to place, right-click or X to cancel.",
+                                  tooltip, kPropPlacementOilCost);
+            }
+        };
+
+        const ImVec4 green     = ImVec4(0.2f, 0.45f, 0.2f, 1.0f);
+        const ImVec4 greenHi   = ImVec4(0.25f, 0.6f, 0.25f, 1.0f);
+        const ImVec4 red       = ImVec4(0.7f, 0.1f, 0.1f, 1.0f);
+
         ImGui::SeparatorText("Combat Units");
+        spawnEntry("Spawn Ship",     "Light combat ship. Projectile attack, mid range.",
+                   "ship", "ship", 4.5f, "Ship", green, greenHi);
+        spawnEntry("Spawn Frigate",  "Frigate. Long-range projectile attacker.",
+                   "frigate", "frigate", 4.5f, "Frigate", green, greenHi);
+        spawnEntry("Spawn Destroyer","Destroyer. AOE splash projectile, high HP.",
+                   "destroyer", "destroyer", 4.5f, "destroyer", green, greenHi);
+        spawnEntry("Spawn Carrier",  "Aircraft Carrier. Orbiting plane harasser.",
+                   "aircraftCarrier", "aircraftCarrier", 4.5f, "AircraftCarrier", green, greenHi);
+        spawnEntry("Spawn Enemy Frigate", "Spawns an enemy-team ship for combat testing.",
+                   "ship", "enemyShip", 4.5f, "EnemyShip", red, red);
 
-            if (ColoredButton("Spawn Ship", ImVec2(-1, 40),
-                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("ship","ship", glm::vec3(4.5f), "Ship");
-                }
-            }
-            if (ColoredButton("Spawn Frigate", ImVec2(-1, 40),
-                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("frigate", "frigate", glm::vec3(4.5f), "Frigate");
-                }
-            }
-            if (ColoredButton("Spawn Destroyer", ImVec2(-1, 40),
-                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("destroyer", "destroyer", glm::vec3(4.5f), "destroyer");
-                }
-            }
-
-                if (ColoredButton("Spawn Carrier", ImVec2(-1, 40),
-                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("aircraftCarrier", "aircraftCarrier", glm::vec3(4.5f), "AircraftCarrier");
-                }
-            }
-
-            if (ColoredButton("Spawn Enemy Frigate", ImVec2(-1, 40),
-                ImVec4(0.7f, 0.1f, 0.1f, 1.0f), ImVec4(0.7f, 0.1f, 0.1f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("ship", "enemyShip", glm::vec3(4.5f), "EnemyShip");
-                }
-            }
         ImGui::SeparatorText("Resource Units");
-
-                 if (ColoredButton("Oil Rig", ImVec2(-1, 40),
-                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("oilRig","oilRig", glm::vec3(2.5f), "OilRig");
-                }
-            }
-
-            if (ColoredButton("Fish Boat", ImVec2(-1, 40),
-                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("fishBoat", "fishBoat", glm::vec3(4.5f), "FishBoat");
-                }
-            }
+        spawnEntry("Oil Rig",  "Stationary oil extractor. Produces Oil over time.",
+                   "oilRig", "oilRig", 2.5f, "OilRig", green, greenHi);
+        spawnEntry("Fish Boat","Fish boat. Only produces Fish while parked on a Fish tile.",
+                   "fishBoat", "fishBoat", 4.5f, "FishBoat", green, greenHi);
 
         ImGui::SeparatorText("Buildings");
+        spawnEntry("Spawn CIWS","CIWS turret. Stationary, very fast fire rate.",
+                   "turret", "turret", 10.5f, "Turret", green, greenHi);
 
-            if (ColoredButton("Spawn CIWS", ImVec2(-1, 40),
-                ImVec4(0.2f, 0.45f, 0.2f, 1.0f), ImVec4(0.25f, 0.6f, 0.25f, 1.0f)))
-            {
-                if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement("turret", "turret", glm::vec3(10.5f), "Turret");
-                }
-            }
-
-
+        if (poor) {
+            ImGui::Spacing();
+            ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.3f, 1.0f),
+                "Need %.0f Oil to place.", kPropPlacementOilCost);
+        }
 
         ImGui::End();
     }
@@ -331,7 +332,7 @@ namespace gps {
             // Object info
             ImGui::SeparatorText("Object");
             ImGui::Text("Name: %s", obj->GetName().c_str());
-            ImGui::Text("ID: %d  |  Tag: %s", obj->GetID(), obj->GetTag());
+            ImGui::Text("ID: %d  |  Tag: %s", obj->GetID(), obj->GetTag().c_str());
 
             // Transform - Position
             ImGui::SeparatorText("Position");
@@ -598,9 +599,10 @@ namespace gps {
                 // Nume mare
                 ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.3f, 1.0f));
                 ImGui::Text("%s", obj->GetName().c_str());
-                ImGui::Text("%d", obj->unitStats.attack);
-                ImGui::Text("%s", obj->GetTag());
                 ImGui::PopStyleColor();
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f),
+                    "Tag: %s   Attack: %d",
+                    obj->GetTag().c_str(), obj->unitStats.attack);
 
                 ImGui::SameLine();
                 ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(ID: %d)", obj->GetID());
@@ -611,29 +613,22 @@ namespace gps {
             {
                 ImGui::Text("Upgrades");
 
-				ImGui::BulletText("Attack: %d", obj->unitStats.attack);
-				ImGui::BulletText("Range: %d", obj->unitStats.attackRange);
-                
+                ImGui::BulletText("Attack: %d",   obj->unitStats.attack);
+                ImGui::BulletText("Range: %.0f",  obj->unitStats.attackRange);
 
-
-                if (ImGui::Button("Upgrade Attack", ImVec2(120, 24)))
-                {
-                    if (m_sceneManager) {
-                    std::cout << "Upgrade Attack button clicked for object ID: " << obj->GetID() << std::endl;
+                if (ImGui::Button("Upgrade Attack", ImVec2(120, 24))) {
                     obj->unitStats.attack += 10;
-                    std::cout << "attack value DEBUG  " << obj->unitStats.attack << std::endl;
-                    //ImGui::BulletText("Range: %d", obj->unitStats.attackRange);
-                    }
                 }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Permanently add +10 to this unit's attack damage.");
 
-                if (ImGui::Button("Upgrade Range", ImVec2(120, 24)))
-                {
-                    if (m_sceneManager) {
-                    std::cout << "Upgrade Range button clicked for object ID: " << obj->GetID() << std::endl;
-                    obj->unitStats.attackRange += 10;
-                    std::cout << "attack value DEBUG  " << obj->unitStats.attackRange << std::endl;
-                    }
+                ImGui::SameLine();
+
+                if (ImGui::Button("Upgrade Range", ImVec2(120, 24))) {
+                    obj->unitStats.attackRange += 10.0f;
                 }
+                if (ImGui::IsItemHovered())
+                    ImGui::SetTooltip("Permanently add +10 to this unit's attack range.");
             }
                 ImGui::Separator();
 
@@ -709,6 +704,9 @@ namespace gps {
             int combatCount = 0;
             int firstStance = -1;
             bool stanceMixed = false;
+            int hpSum = 0;
+            int hpMaxSum = 0;
+            int attackSum = 0;
 
             for (int id : selectedIDs) {
                 SceneObject* obj = m_scene->GetObjectByID(id);
@@ -721,17 +719,32 @@ namespace gps {
 
                 if (obj->movement.isMoving) movingCount++;
 
+                hpSum    += obj->unitStats.health;
+                hpMaxSum += obj->unitStats.maxHealth;
+
                 if (obj->unitStats.isCombatUnit) {
                     int s = (int)obj->unitStats.stance;
                     if (firstStance == -1) firstStance = s;
                     else if (s != firstStance) stanceMixed = true;
                     combatCount++;
+                    attackSum += obj->unitStats.attack;
                 }
             }
 
             if (orcCount > 0)   ImGui::Text("  Orcs: %d", orcCount);
             if (troopCount > 0) ImGui::Text("  Troops: %d", troopCount);
             if (otherCount > 0) ImGui::Text("  Other: %d", otherCount);
+
+            ImGui::Spacing();
+            if (hpMaxSum > 0) {
+                ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.7f, 1.0f),
+                    "Total HP: %d / %d", hpSum, hpMaxSum);
+            }
+            if (combatCount > 0) {
+                ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.6f, 1.0f),
+                    "Avg attack: %.1f (%d combat units)",
+                    (float)attackSum / (float)combatCount, combatCount);
+            }
 
             ImGui::Spacing();
             if (movingCount > 0) {
@@ -789,7 +802,13 @@ namespace gps {
     // ===========================
 
     void GuiManager::RenderDebugPanel() {
-        ImGui::SetNextWindowPos(ImVec2(10, 45), ImGuiCond_FirstUseEver);
+        // Default to bottom-left so it doesn't fight SpawnPanel (top-left),
+        // CommandPanel (bottom-right) or the new Minimap (top-right).
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->WorkPos.x + 10,
+                   vp->WorkPos.y + vp->WorkSize.y - 410),
+            ImGuiCond_FirstUseEver);
         ImGui::SetNextWindowSize(ImVec2(280, 400), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Debug [F1]", &m_showDebugPanel);
@@ -960,6 +979,248 @@ namespace gps {
         c[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.40f, 0.33f, 0.18f, 1.00f);
         c[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.50f, 0.40f, 0.20f, 1.00f);
         c[ImGuiCol_PlotLines] = ImVec4(0.80f, 0.60f, 0.20f, 1.00f);
+    }
+
+    // ===========================
+    // HELP OVERLAY — H key, hotkey legend
+    // ===========================
+
+    void GuiManager::RenderHelpOverlay() {
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImVec2 size(380, 360);
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->WorkPos.x + (vp->WorkSize.x - size.x) * 0.5f,
+                   vp->WorkPos.y + (vp->WorkSize.y - size.y) * 0.5f),
+            ImGuiCond_Always);
+        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.10f, 0.96f));
+        ImGui::Begin("Help [H]", &m_showHelp,
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Camera");
+        ImGui::BulletText("W A S D            Pan camera");
+        ImGui::BulletText("Mouse to edge      Pan camera");
+        ImGui::BulletText("Middle mouse drag  Pan camera");
+        ImGui::BulletText("Scroll wheel       Zoom (smoothed)");
+        ImGui::BulletText("F (double-tap)     Focus on selection");
+
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Gameplay");
+        ImGui::BulletText("B                  Spawn Orc");
+        ImGui::BulletText("N                  Spawn Formation");
+        ImGui::BulletText("T                  Select all troops");
+        ImGui::BulletText("C                  Clear selection");
+        ImGui::BulletText("X                  Cancel placement mode");
+        ImGui::BulletText("P                  Pause / Resume");
+
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "Panels & Modes");
+        ImGui::BulletText("F1                 Toggle debug panel");
+        ImGui::BulletText("F5                 Toggle Edit / Play mode");
+        ImGui::BulletText("H                  Toggle this help overlay");
+        ImGui::BulletText("ESC                Quit");
+
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f), "Edit Mode only:");
+        ImGui::BulletText("G                  Translate tool");
+        ImGui::BulletText("R                  Scale tool");
+
+        ImGui::End();
+        ImGui::PopStyleColor();
+    }
+
+    // ===========================
+    // MINIMAP — top-right under TopBar, click teleports camera
+    // ===========================
+
+    void GuiManager::RenderMinimap() {
+        if (!m_tileManager) return;
+        glm::vec3 gMin, gMax;
+        if (!m_tileManager->GetGridBounds(gMin, gMax)) return;
+
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        const float side   = 180.0f;
+        const float margin = 10.0f;
+
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->WorkPos.x + vp->WorkSize.x - side - margin,
+                   vp->WorkPos.y + 40.0f),
+            ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(side, side), ImGuiCond_Always);
+
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(2, 2));
+        ImGui::Begin("Minimap", nullptr,
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoSavedSettings);
+
+        ImVec2 origin = ImGui::GetCursorScreenPos();
+        ImVec2 avail  = ImGui::GetContentRegionAvail();
+        ImDrawList* dl = ImGui::GetWindowDrawList();
+
+        const float worldW = gMax.x - gMin.x;
+        const float worldH = gMax.z - gMin.z;
+        if (worldW <= 0.0f || worldH <= 0.0f) { ImGui::End(); ImGui::PopStyleVar(); return; }
+
+        // Match what the player sees on screen. The camera at (0, 200, -200)
+        // makes its right vector point to world -X, so world +X is on the LEFT
+        // of the screen and world +Z is at the TOP. Flip both axes so the
+        // minimap reads the same way the world does on screen.
+        auto worldToMini = [&](float wx, float wz) {
+            float u = 1.0f - (wx - gMin.x) / worldW;
+            float v = 1.0f - (wz - gMin.z) / worldH;
+            return ImVec2(origin.x + u * avail.x, origin.y + v * avail.y);
+        };
+
+        // Background
+        dl->AddRectFilled(origin,
+            ImVec2(origin.x + avail.x, origin.y + avail.y),
+            IM_COL32(15, 25, 45, 255));
+
+        // Tiles by type
+        const float tilePx = (avail.x / std::max(1.0f, worldW)) * m_tileManager->GetTileSize();
+        for (const Tile* t : m_tileManager->GetAllTiles()) {
+            if (!t) continue;
+            ImVec2 c = worldToMini(t->worldPos.x, t->worldPos.z);
+            ImU32 col = IM_COL32(30, 60, 120, 255); // Sea
+            switch (t->type) {
+                case TileType::Oil:      col = IM_COL32(60, 50, 40, 255);   break;
+                case TileType::Fish:     col = IM_COL32(40, 130, 150, 255); break;
+                case TileType::Shallows: col = IM_COL32(70, 110, 170, 255); break;
+                case TileType::Land:     col = IM_COL32(90, 95, 60, 255);   break;
+                default: break;
+            }
+            float h = tilePx * 0.5f;
+            dl->AddRectFilled(ImVec2(c.x - h, c.y - h), ImVec2(c.x + h, c.y + h), col);
+        }
+
+        // Units (active scene objects with collision radius — skips projectiles)
+        if (m_scene) {
+            for (const auto& objPtr : m_scene->GetObjects()) {
+                SceneObject* o = objPtr.get();
+                if (!o || !o->IsActive()) continue;
+                if (o->projectileData.isProjectile) continue;
+                if (o->GetTag() == "tile" || o->GetTag() == "islandT") continue;
+
+                ImVec2 p = worldToMini(o->GetTransform().GetPosition().x,
+                                       o->GetTransform().GetPosition().z);
+                ImU32 dot = IM_COL32(180, 180, 180, 255);
+                switch (o->unitStats.faction) {
+                    case 1: dot = IM_COL32(80, 180, 255, 255); break;
+                    case 2: dot = IM_COL32(255, 90, 90, 255);  break;
+                    default: break;
+                }
+                bool isSel = (m_selectionSystem && m_selectionSystem->IsSelected(o->GetID()));
+                float r = isSel ? 3.5f : 2.0f;
+                if (isSel) dl->AddCircle(p, r + 1.0f, IM_COL32(255, 255, 80, 255), 8, 1.0f);
+                dl->AddCircleFilled(p, r, dot, 8);
+            }
+        }
+
+        // Camera position marker (approx — just a small X)
+        {
+            ImVec2 p = worldToMini(m_cameraPos.x, m_cameraPos.z);
+            //const float s = 5.0f;
+            ImU32 col = IM_COL32(255, 220, 120, 255);
+            dl->AddLine(ImVec2(p.x, p.y ), ImVec2(p.x , p.y ), col, 1.5f);
+            dl->AddLine(ImVec2(p.x, p.y ), ImVec2(p.x , p.y ), col, 1.5f);
+        }
+
+        // Border
+        dl->AddRect(origin,
+            ImVec2(origin.x + avail.x, origin.y + avail.y),
+            IM_COL32(180, 150, 70, 255), 0.0f, 0, 1.5f);
+
+        // Click to teleport — invisible button covers the area
+        ImGui::InvisibleButton("##minimap_click", avail);
+        if (ImGui::IsItemClicked(ImGuiMouseButton_Left)) {
+            ImVec2 mouse = ImGui::GetIO().MousePos;
+            float u = (mouse.x - origin.x) / avail.x;
+            float v = (mouse.y - origin.y) / avail.y;
+            u = std::clamp(u, 0.0f, 1.0f);
+            v = std::clamp(v, 0.0f, 1.0f);
+            // Inverse of worldToMini: both u and v are flipped.
+            m_minimapClickWorldPoint = glm::vec3(
+                gMin.x + (1.0f - u) * worldW,
+                0.0f,
+                gMin.z + (1.0f - v) * worldH);
+            m_minimapClickPending = true;
+        }
+
+        ImGui::End();
+        ImGui::PopStyleVar();
+    }
+
+    // ===========================
+    // PAUSE OVERLAY — full screen tint with centered text
+    // ===========================
+
+    void GuiManager::RenderPauseOverlay() {
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(vp->WorkPos);
+        ImGui::SetNextWindowSize(vp->WorkSize);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.0f, 0.0f, 0.0f, 0.45f));
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::Begin("##PauseOverlay", nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoBringToFrontOnFocus |
+            ImGuiWindowFlags_NoInputs);
+
+        const char* text = "PAUSED";
+        ImVec2 sz = ImGui::CalcTextSize(text);
+        ImGui::SetCursorPos(ImVec2((vp->WorkSize.x - sz.x * 4.0f) * 0.5f,
+                                   (vp->WorkSize.y - sz.y * 4.0f) * 0.5f));
+        ImGui::SetWindowFontScale(4.0f);
+        ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%s", text);
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::End();
+        ImGui::PopStyleVar();
+        ImGui::PopStyleColor();
+    }
+
+    // ===========================
+    // GAME STATE OVERLAY — Victory / Defeat placeholders
+    // ===========================
+
+    void GuiManager::RenderGameStateOverlay() {
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImVec2 size(360, 180);
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->WorkPos.x + (vp->WorkSize.x - size.x) * 0.5f,
+                   vp->WorkPos.y + (vp->WorkSize.y - size.y) * 0.5f),
+            ImGuiCond_Always);
+        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+
+        const bool won = m_victory;
+        ImVec4 accent = won ? ImVec4(0.3f, 0.9f, 0.4f, 1.0f) : ImVec4(0.95f, 0.3f, 0.3f, 1.0f);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.10f, 0.98f));
+        ImGui::Begin("##GameState", nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::SetWindowFontScale(2.5f);
+        const char* title = won ? "VICTORY" : "DEFEAT";
+        ImVec2 ts = ImGui::CalcTextSize(title);
+        ImGui::SetCursorPosX((size.x - ts.x) * 0.5f);
+        ImGui::TextColored(accent, "%s", title);
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Continue", ImVec2(-1, 32))) {
+            m_victory = false;
+            m_defeat  = false;
+        }
+
+        ImGui::End();
+        ImGui::PopStyleColor();
     }
 
 } // namespace gps

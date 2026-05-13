@@ -60,7 +60,7 @@ namespace gps {
         if (!m_sceneManager) return;
 
         SceneObject* cannonBall = m_sceneManager->SpawnObject("projectile", "projectile", "projectile",
-            origin->GetTransform().GetPosition(), glm::vec3(3.5f, 3.5f, 3.5f));
+            origin->GetTransform().GetPosition(), glm::vec3(7.5f, 7.5f, 7.5f));
         if (!cannonBall) return;
 
         cannonBall->projectileData.isProjectile = true;
