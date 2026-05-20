@@ -177,9 +177,9 @@ std::vector<const GLchar*> faces{
 // ===========================
 // TILE MANAGER
 // ===========================
-// Hex tile model has center-to-vertex = 5.587 in model units; scaled by 27 -> ~150.85 world units.
-// m_tileSize must equal world center-to-vertex for hexes to pack flush.
-gps::TileManager g_tileManager(150.85f, glm::vec3(27.0f), -60);
+// Hex tile model has center-to-vertex = 5.587 in model units; tile size must equal
+// modelScale * 5.587 for hexes to pack flush. Smaller tile -> denser-feeling map.
+gps::TileManager g_tileManager(100.566f, glm::vec3(18.0f), -60);
 
 // ===========================
 // NOILE SISTEME (GLOBALE)
@@ -337,6 +337,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                     g_selectionSystem->EndBoxSelection(*g_scene, myCamera, projection, shiftHeld);
                 }
             }
+
         }
         // In edit mode, right-click does nothing (no movement commands)
         return;
@@ -364,7 +365,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             glm::vec3 worldPos = screenToWorld(mousePos);
 
             glm::vec3 gridMin, gridMax;
-            if (g_tileManager.GetGridBounds(gridMin, gridMax)) {
+            if (g_tileManager.GetPlayableBounds(gridMin, gridMax)) {
                 worldPos.x = glm::clamp(worldPos.x, gridMin.x, gridMax.x);
                 worldPos.z = glm::clamp(worldPos.z, gridMin.z, gridMax.z);
             }
@@ -388,14 +389,26 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
             int gx, gz;
             g_tileManager.WorldToGrid(spawned->GetTransform().GetPosition(), gx, gz);
-            bool matchingTile = false;     
-            
+            bool matchingTile = false;
+
             if (gps::Tile* t = g_tileManager.GetTile(gx, gz)) {
+                // Block placement on the decorative border ring.
+                if (t->isBorder) {
+                    g_scene->DestroyObject(spawned->GetID());
+                    spawned = nullptr;
+                    return;
+                }
                 if(t->type != gps::TileType::Land && spawned->GetTag() == "turret") {
                         g_scene->DestroyObject(spawned->GetID());
                         spawned = nullptr;
                          return;
                 }
+            } else {
+                // Click landed outside any tile (shouldn't happen after clamp,
+                // but reject defensively rather than spawn into the void).
+                g_scene->DestroyObject(spawned->GetID());
+                spawned = nullptr;
+                return;
             }
             
             if (spawned) {
@@ -486,30 +499,38 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         if (selectedIDs.empty()) return;
 
         glm::vec3 gridMin, gridMax;
-        bool hasGrid = g_tileManager.GetGridBounds(gridMin, gridMax);
+        bool hasGrid = g_tileManager.GetPlayableBounds(gridMin, gridMax);
 
-        int numSelected = selectedIDs.size();
-        int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(numSelected))));
-        float spacing = 15.0f;
+        // Preserve current formation: compute the centroid of all movable units
+        // and translate that centroid onto the click point. Each unit then moves
+        // to (worldPos + its own offset from centroid), so the group keeps its
+        // relative shape instead of stacking up on the same destination.
+        glm::vec3 centroid(0.0f);
+        int movableCount = 0;
+        for (int troopID : selectedIDs) {
+            gps::SceneObject* obj = g_scene->GetObjectByID(troopID);
+            if (!obj || !obj->unitStats.isMovable) continue;
+            centroid += obj->GetTransform().GetPosition();
+            ++movableCount;
+        }
+        if (movableCount == 0) return;
+        centroid /= static_cast<float>(movableCount);
 
-        int idx = 0;
         for (int troopID : selectedIDs) {
             gps::SceneObject* obj = g_scene->GetObjectByID(troopID);
             if (!obj) continue;
             if (!obj->unitStats.isMovable) continue;
-            int row = idx / columns;
-            int col = idx % columns;
-            float offsetX = (col - columns / 2.0f) * spacing;
-            float offsetZ = (row - numSelected / columns / 2.0f) * spacing;
 
-            glm::vec3 formationPos = worldPos + glm::vec3(offsetX, 0.0f, offsetZ);
+            glm::vec3 startPos = obj->GetTransform().GetPosition();
+            glm::vec3 offset = startPos - centroid;
+            offset.y = 0.0f;
+            glm::vec3 formationPos = worldPos + offset;
 
             if (hasGrid) {
                 formationPos.x = glm::clamp(formationPos.x, gridMin.x, gridMax.x);
                 formationPos.z = glm::clamp(formationPos.z, gridMin.z, gridMax.z);
             }
 
-            glm::vec3 startPos = obj->GetTransform().GetPosition();
             glm::vec3 moveDir = formationPos - startPos;
             moveDir.y = 0.0f;
 
@@ -530,8 +551,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             if (gps::Tile* destTile = g_tileManager.GetTile(dgx, dgz)) {
                 obj->movement.moveDuration *= gps::GetTileEffect(destTile->type).moveDurationMul;
             }
-
-            idx++;
         }
     }
 }
@@ -569,7 +588,20 @@ void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
 
     // Push a new target; the actual zoomFactor eases toward it in processMovement.
     targetZoomFactor *= (1.0f - static_cast<float>(yoffset) * 0.1f);
-    targetZoomFactor = glm::clamp(targetZoomFactor, 0.5f, 2.0f);
+
+    // Derive max zoom from the grid AABB so the whole map (incl. border ring)
+    // can fit on-screen even on smaller resolutions. 0.707 accounts for the
+    // ~45 deg camera tilt that compresses world-Z onto the screen-Y axis.
+    float maxZ = 2.0f;
+    glm::vec3 gMin, gMax;
+    if (g_tileManager.GetGridBounds(gMin, gMax)) {
+        const float aspect = static_cast<float>(retina_width) / static_cast<float>(retina_height);
+        const float W = gMax.x - gMin.x;
+        const float H = (gMax.z - gMin.z) * 0.707f;
+        const float needOrtho = std::max(W / (2.0f * aspect), H * 0.5f) * 1.05f;
+        maxZ = std::max(2.0f, needOrtho / 150.0f);
+    }
+    targetZoomFactor = glm::clamp(targetZoomFactor, 0.5f, maxZ);
 }
 
 //
@@ -820,8 +852,10 @@ void initSceneManager() {
     g_tileManager.RegisterTileModel(gps::TileType::Fish,     &fishTile);
     g_tileManager.RegisterTileModel(gps::TileType::Shallows, &desertTile);
     g_tileManager.RegisterTileModel(gps::TileType::Land,     &greenTile);
-    // Generate initial 3x3 tile grid centered at origin
-    g_tileManager.GenerateAndLoadGrid(-2, 1, -1, 2);
+    // Generate playable grid + a half-scale border ring around it.
+    // Larger grid gives the cluster-based procedural gen room to form visible
+    // islands; the scroll-wheel max zoom auto-derives from these bounds.
+    g_tileManager.GenerateAndLoadGrid(-30, 10, -10, 10);
 
     // 4. Setup scena
     g_sceneManager->SetupScene();
@@ -1273,7 +1307,7 @@ void renderScene(gps::Shader shader) {
             glm::vec3 ghostPos = screenToWorld(mousePos);
 
             glm::vec3 gridMin, gridMax;
-            if (g_tileManager.GetGridBounds(gridMin, gridMax)) {
+            if (g_tileManager.GetPlayableBounds(gridMin, gridMax)) {
                 ghostPos.x = glm::clamp(ghostPos.x, gridMin.x, gridMax.x);
                 ghostPos.z = glm::clamp(ghostPos.z, gridMin.z, gridMax.z);
             }
@@ -1505,7 +1539,7 @@ int main(int argc, const char* argv[]) {
         // Update troops movement
         double currentTime = glfwGetTime();
         glm::vec3 gridBoundsMin, gridBoundsMax;
-        bool hasGridBounds = g_tileManager.GetGridBounds(gridBoundsMin, gridBoundsMax);
+        bool hasGridBounds = g_tileManager.GetPlayableBounds(gridBoundsMin, gridBoundsMax);
 
         // Movement loop
         for (const auto& objPtr : g_scene->GetObjects()) {
@@ -1541,17 +1575,17 @@ int main(int argc, const char* argv[]) {
 
             obj->UpdateWorldBounds();
 
-            // Land tiles block ships: revert and halt at the boundary.
+            // Land tiles, the decorative border ring, and the void outside any
+            // tile all block ships: revert and halt at the boundary.
             if (!obj->projectileData.isProjectile) {
                 int gx, gz;
                 g_tileManager.WorldToGrid(newPos, gx, gz);
-                if (gps::Tile* t = g_tileManager.GetTile(gx, gz)) {
-                    if (t->type == gps::TileType::Land) {
-                        obj->GetTransform().SetPosition(oldPos);
-                        obj->movement.isMoving = false;
-                        obj->UpdateWorldBounds();
-                        continue;
-                    }
+                gps::Tile* t = g_tileManager.GetTile(gx, gz);
+                if (!t || t->isBorder || t->type == gps::TileType::Land) {
+                    obj->GetTransform().SetPosition(oldPos);
+                    obj->movement.isMoving = false;
+                    obj->UpdateWorldBounds();
+                    continue;
                 }
             }
 
@@ -1675,6 +1709,7 @@ int main(int argc, const char* argv[]) {
         g_guiManager->SetDeltaTime(deltaTime);
         g_guiManager->SetCameraPosition(myCamera.getCameraPosition());
         g_guiManager->SetZoomFactor(zoomFactor);
+        g_guiManager->SetViewProjection(view, projection);
     }
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

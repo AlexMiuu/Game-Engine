@@ -122,6 +122,8 @@ namespace gps {
         if (m_showHelp)       RenderHelpOverlay();
         if (m_paused)         RenderPauseOverlay();
         if (m_victory || m_defeat) RenderGameStateOverlay();
+
+        RenderHealthBars();
     }
 
     bool GuiManager::ConsumeMinimapClick(glm::vec3& outWorldPoint) {
@@ -365,12 +367,52 @@ namespace gps {
                 obj->GetTransform().SetScale(uniScale);
                 obj->UpdateWorldBounds();
             }
+
+            // Single-tile type editor.
+            if (m_tileManager && obj->GetTag() == "tile") {
+                int gx, gz;
+                m_tileManager->WorldToGrid(obj->GetTransform().GetPosition(), gx, gz);
+                if (Tile* tile = m_tileManager->GetTile(gx, gz)) {
+                    ImGui::SeparatorText("Tile Type");
+                    static const char* kTypeNames[] = { "Sea", "Oil", "Fish", "Shallows", "Land" };
+                    int current = static_cast<int>(tile->type);
+                    if (ImGui::Combo("##TileType", &current, kTypeNames, IM_ARRAYSIZE(kTypeNames))) {
+                        m_tileManager->SetTileType(gx, gz, static_cast<TileType>(current));
+                    }
+                }
+            }
         }
         else {
             ImGui::SeparatorText("Multiple Selection");
             ImGui::Text("%zu objects selected", selectedIDs.size());
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
                 "Select a single object to edit its transform.");
+
+            // Multi-tile type editor: apply the chosen TileType to every
+            // selected tile. Only fires the frame the combo actually changes
+            // (Combo() returns true once) so we don't hammer SetTileType.
+            if (m_tileManager) {
+                bool anyTile = false;
+                for (int id : selectedIDs) {
+                    SceneObject* o = m_scene->GetObjectByID(id);
+                    if (o && o->GetTag() == "tile") { anyTile = true; break; }
+                }
+                if (anyTile) {
+                    ImGui::SeparatorText("Tile Type (Bulk)");
+                    static const char* kTypeNames[] = { "Sea", "Oil", "Fish", "Shallows", "Land" };
+                    static int bulkChoice = 0;
+                    if (ImGui::Combo("##BulkTileType", &bulkChoice, kTypeNames, IM_ARRAYSIZE(kTypeNames))) {
+                        TileType newType = static_cast<TileType>(bulkChoice);
+                        for (int id : selectedIDs) {
+                            SceneObject* o = m_scene->GetObjectByID(id);
+                            if (!o || o->GetTag() != "tile") continue;
+                            int gx, gz;
+                            m_tileManager->WorldToGrid(o->GetTransform().GetPosition(), gx, gz);
+                            m_tileManager->SetTileType(gx, gz, newType);
+                        }
+                    }
+                }
+            }
         }
 
         ImGui::End();
@@ -1229,6 +1271,60 @@ namespace gps {
 
         ImGui::End();
         ImGui::PopStyleColor();
+    }
+
+    // ===========================
+    // HEALTH BARS — billboard above each alive unit
+    // ===========================
+    void GuiManager::RenderHealthBars() {
+        if (!m_scene) return;
+
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        const ImVec2 vpPos = vp->Pos;
+        const ImVec2 vpSize = vp->Size;
+        ImDrawList* dl = ImGui::GetForegroundDrawList();
+
+        const glm::mat4 vpMat = m_proj * m_view;
+
+        for (const auto& objPtr : m_scene->GetObjects()) {
+            SceneObject* obj = objPtr.get();
+            if (!obj || !obj->IsActive()) continue;
+            if (obj->projectileData.isProjectile) continue;
+            if (!obj->unitStats.isAlive) continue;
+            if (obj->unitStats.maxHealth <= 0) continue;
+
+            // Anchor a bit above the unit's bounding sphere so it floats overhead.
+            glm::vec3 wp = obj->GetWorldCenter();
+            wp.y += obj->GetWorldRadius() + 2.0f;
+
+            glm::vec4 clip = vpMat * glm::vec4(wp, 1.0f);
+            if (clip.w <= 0.0001f) continue;
+            glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            if (ndc.x < -1.2f || ndc.x > 1.2f) continue;
+            if (ndc.y < -1.2f || ndc.y > 1.2f) continue;
+            if (ndc.z < -1.0f || ndc.z >  1.0f) continue;
+
+            const float sx = vpPos.x + (ndc.x * 0.5f + 0.5f) * vpSize.x;
+            const float sy = vpPos.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * vpSize.y;
+
+            const float w = 42.0f;
+            const float h = 5.0f;
+            float frac = static_cast<float>(obj->unitStats.health)
+                       / static_cast<float>(obj->unitStats.maxHealth);
+            frac = (frac < 0.0f) ? 0.0f : (frac > 1.0f) ? 1.0f : frac;
+
+            const ImU32 bg     = IM_COL32(20, 20, 20, 200);
+            const ImU32 border = IM_COL32(0, 0, 0, 255);
+            const ImU32 fg = (frac > 0.6f) ? IM_COL32(60, 200, 60, 240)
+                            : (frac > 0.3f) ? IM_COL32(230, 180, 30, 240)
+                                            : IM_COL32(220, 50, 50, 240);
+
+            const ImVec2 a(sx - w * 0.5f, sy - h * 0.5f);
+            const ImVec2 b(sx + w * 0.5f, sy + h * 0.5f);
+            dl->AddRectFilled(a, b, bg);
+            dl->AddRectFilled(a, ImVec2(a.x + w * frac, b.y), fg);
+            dl->AddRect(a, b, border);
+        }
     }
 
 } // namespace gps

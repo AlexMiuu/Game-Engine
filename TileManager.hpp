@@ -59,6 +59,7 @@ namespace gps {
         std::string terrainType;
 
         TileType type = TileType::Sea;
+        bool isBorder = false;   // decorative half-scale ring around playable area
 
         Tile() : gridX(0), gridZ(0), worldPos(0.0f), sceneObjectId(-1),
             isLoaded(false), terrainType("default") {}
@@ -96,9 +97,22 @@ namespace gps {
         void RegisterTileModel(TileType type, Model3D* model);
 
         /**
+         * @brief Change a tile's TileType at runtime; swaps the SceneObject's
+         * model to the one registered for the new type and refreshes bounds.
+         */
+        void SetTileType(int gridX, int gridZ, TileType newType);
+
+        /**
          * @brief Atribuie procedural TileType la fiecare tile (doar cele cu type==Sea)
          */
         void AssignProceduralTypes(unsigned seed = 1337u);
+
+        /**
+         * @brief Add a decorative half-scale tile ring around the playable area
+         * so the outline reads as a rectangular border. Border tiles are marked
+         * isBorder=true and are not playable (no placement, units bounce off).
+         */
+        void GenerateBorderRing();
 
         // ===========================
         // TILE CREATION / LOADING
@@ -186,8 +200,12 @@ namespace gps {
         int GetLoadedCount() const;
         int GetTotalCount() const { return static_cast<int>(m_tiles.size()); }
 
-        // Grid bounds (returns the world-space AABB of all loaded tiles)
+        // Grid bounds (returns the world-space AABB of all loaded tiles, including border)
         bool GetGridBounds(glm::vec3& outMin, glm::vec3& outMax) const;
+
+        // Tight AABB of just the playable (non-border) tiles. Use this for unit
+        // movement and placement clamping so units stop before the border ring.
+        bool GetPlayableBounds(glm::vec3& outMin, glm::vec3& outMax) const;
 
         // Grid range getters
         void GetGridRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const;

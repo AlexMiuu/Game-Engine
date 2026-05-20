@@ -70,6 +70,8 @@ namespace gps {
         void RenderMinimap();
         void RenderPauseOverlay();
         void RenderGameStateOverlay();
+        // Billboard HP bars projected above every alive unit.
+        void RenderHealthBars();
 
         // Editor state
         void BindEditorState(EditorState* editorState) { m_editorState = editorState; }
@@ -83,6 +85,8 @@ namespace gps {
         void SetCameraPosition(const glm::vec3& pos) { m_cameraPos = pos; }
         void SetDeltaTime(float dt) { m_deltaTime = dt; }
         void SetZoomFactor(float zoom) { m_zoomFactor = zoom; }
+        // Cached every frame from main so RenderHealthBars can project world -> screen.
+        void SetViewProjection(const glm::mat4& view, const glm::mat4& proj) { m_view = view; m_proj = proj; }
 
         // Panel toggles
         void SetDebugPanelVisible(bool v) { m_showDebugPanel = v; }
@@ -136,6 +140,8 @@ namespace gps {
         glm::vec3 m_cameraPos;
         float m_deltaTime;
         float m_zoomFactor;
+        glm::mat4 m_view = glm::mat4(1.0f);
+        glm::mat4 m_proj = glm::mat4(1.0f);
 
         // FPS tracking (media pe mai multe frame-uri)
         float m_fpsHistory[120];

@@ -98,13 +98,14 @@ namespace gps {
         }
 
         glm::vec3 spawn = target + glm::vec3(0.0f, 300.0f, 0.0f);
-
         for(int i=0;i<8;i++)
         {
             glm::vec3 spawn = target + glm::vec3(rand() % 60 - 40, 300.0f, rand() % 60 - 40);
             SceneObject* bomb = m_sceneManager->SpawnObject(
             "Bombardment", "projectile", "projectile", spawn, glm::vec3(12.0f));
         if (!bomb) return;
+
+        glm::vec3 target2 = target + glm::vec3(rand() % 60 - 40, 0.0f, rand() % 60 - 40);
 
         bomb->projectileData.isProjectile = true;
         bomb->projectileData.ownerID      = ownerID;
@@ -114,7 +115,7 @@ namespace gps {
 
         bomb->movement.isMoving      = true;
         bomb->movement.moveStartPos  = spawn;
-        bomb->movement.moveEndPos    = target;
+        bomb->movement.moveEndPos    = target2;
         bomb->movement.moveDirection = glm::vec3(0.0f, -1.0f, 0.0f);
         bomb->movement.moveStartTime = (float)glfwGetTime();
         bomb->movement.moveDuration  = 3.75f;

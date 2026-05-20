@@ -11,6 +11,8 @@
 #include <cmath>
 #include <limits>
 #include <random>
+#include <array>
+#include <algorithm>
 
 namespace gps {
 
@@ -60,6 +62,26 @@ namespace gps {
     void TileManager::RegisterTileModel(TileType type, Model3D* model) {
         if (!model) return;
         m_typeModels[static_cast<int>(type)] = model;
+    }
+
+    void TileManager::SetTileType(int gridX, int gridZ, TileType newType) {
+        Tile* tile = GetTile(gridX, gridZ);
+        if (!tile || tile->isBorder) return;
+        tile->type = newType;
+        if (!m_scene || !tile->isLoaded || tile->sceneObjectId < 0) return;
+
+        SceneObject* obj = m_scene->GetObjectByID(tile->sceneObjectId);
+        if (!obj) return;
+
+        Model3D* model = m_terrainModel;
+        auto it = m_typeModels.find(static_cast<int>(newType));
+        if (it != m_typeModels.end() && it->second) model = it->second;
+        obj->SetModel(model);
+
+        glm::vec3 c; float r;
+        ComputeLocalBoundingSphere(model, c, r);
+        obj->SetLocalBounds(c, r);
+        obj->UpdateWorldBounds();
     }
 
     // ===========================
@@ -211,7 +233,7 @@ namespace gps {
 
     void TileManager::GenerateAndLoadGrid(int minX, int maxX, int minZ, int maxZ,
         const std::string& terrainType) {
-        // 1. create all tiles (no scene objects yet)
+        // 1. create all playable tiles (no scene objects yet)
         for (int x = minX; x <= maxX; ++x)
             for (int z = minZ; z <= maxZ; ++z)
                 CreateTile(x, z, terrainType);
@@ -219,10 +241,14 @@ namespace gps {
         // 2. assign procedural TileType so LoadTile knows which icon to spawn
         AssignProceduralTypes();
 
-        // 3. load all (creates terrain SceneObjects + spawns icons)
-        for (int x = minX; x <= maxX; ++x)
-            for (int z = minZ; z <= maxZ; ++z)
-                LoadTile(x, z);
+        // 3. wrap with a half-scale border ring so the map outline is rectangular
+        GenerateBorderRing();
+
+        // 4. load every tile (playable + border)
+        std::vector<GridKey> keys;
+        keys.reserve(m_tiles.size());
+        for (const auto& p : m_tiles) keys.push_back(p.first);
+        for (const auto& k : keys) LoadTile(k.x, k.z);
 
         std::cout << "[TileManager] Generated and loaded grid: " << m_tiles.size() << " tiles" << std::endl;
     }
@@ -230,28 +256,87 @@ namespace gps {
     // ===========================
     // PROCEDURAL TYPE ASSIGNMENT
     // ===========================
+    // Cluster-based: pick a few island seeds, BFS-grow them with decaying
+    // probability, ring the islands with Shallows, then scatter Oil/Fish in
+    // the remaining Sea tiles. Skips border tiles entirely.
     void TileManager::AssignProceduralTypes(unsigned seed) {
         std::mt19937 rng(seed);
         std::uniform_real_distribution<float> roll(0.0f, 1.0f);
 
-        // Density per type (sums < 1.0; remainder stays Sea).
-        // Tunable: bump up Oil/Fish to see more icons during dev.
-        constexpr float kOil      = 0.15f;
-        constexpr float kFish     = 0.15f;
-        constexpr float kShallows = 0.10f;
-        constexpr float kLand     = 0.10f;
+        // Reset playable tiles back to Sea so re-generation is idempotent.
+        std::vector<GridKey> playable;
+        playable.reserve(m_tiles.size());
+        for (auto& p : m_tiles) {
+            if (p.second.isBorder || p.second.isLoaded) continue;
+            p.second.type = TileType::Sea;
+            playable.push_back(p.first);
+        }
+        if (playable.empty()) return;
 
-        for (auto& pair : m_tiles) {
-            Tile& tile = pair.second;
-            // Don't reassign tiles that already have a non-default type or are already loaded.
-            if (tile.type != TileType::Sea || tile.isLoaded) continue;
+        // Odd-q offset hex neighbors. Must stay consistent with GridToWorld.
+        auto neighbors = [](int x, int z) {
+            std::array<std::pair<int, int>, 6> out;
+            const bool odd = (x & 1);
+            if (odd) {
+                out = { { {x + 1, z + 1}, {x + 1, z}, {x, z - 1},
+                          {x - 1, z}, {x - 1, z + 1}, {x, z + 1} } };
+            } else {
+                out = { { {x + 1, z}, {x + 1, z - 1}, {x, z - 1},
+                          {x - 1, z - 1}, {x - 1, z}, {x, z + 1} } };
+            }
+            return out;
+        };
 
+        // Island count scales with grid size; growth rolls keep each island
+        // small (~3-4 tile radius) so they read as patches, not continents.
+        const int maxSeeds = std::min<int>(6, std::max<int>(2, (int)playable.size() / 25));
+        const int numSeeds = 2 + (rng() % std::max(1, maxSeeds - 1));
+        std::shuffle(playable.begin(), playable.end(), rng);
+
+        for (int s = 0; s < numSeeds && s < (int)playable.size(); ++s) {
+            std::vector<std::pair<GridKey, int>> stack;
+            stack.push_back({ playable[s], 0 });
+            while (!stack.empty()) {
+                auto [k, depth] = stack.back(); stack.pop_back();
+                Tile* t = GetTile(k.x, k.z);
+                if (!t || t->isBorder) continue;
+                if (t->type == TileType::Land) continue;
+                const float pGrow = 0.78f - depth * 0.24f;
+                if (roll(rng) > pGrow) {
+                    // Failed roll on the edge of an island -> sandy shallows ring.
+                    if (depth > 0 && t->type == TileType::Sea) t->type = TileType::Shallows;
+                    continue;
+                }
+                t->type = TileType::Land;
+                for (const auto& n : neighbors(k.x, k.z))
+                    stack.push_back({ {n.first, n.second}, depth + 1 });
+            }
+        }
+
+        // Sparse Oil/Fish scattered in remaining Sea tiles.
+        for (auto& p : m_tiles) {
+            Tile& t = p.second;
+            if (t.isBorder || t.type != TileType::Sea) continue;
             float r = roll(rng);
-            if      (r < kOil)                                tile.type = TileType::Oil;
-            else if (r < kOil + kFish)                        tile.type = TileType::Fish;
-            else if (r < kOil + kFish + kShallows)            tile.type = TileType::Shallows;
-            else if (r < kOil + kFish + kShallows + kLand)    tile.type = TileType::Land;
-            // else stays Sea
+            if      (r < 0.08f) t.type = TileType::Oil;
+            else if (r < 0.16f) t.type = TileType::Fish;
+        }
+    }
+
+    void TileManager::GenerateBorderRing() {
+        int minX, maxX, minZ, maxZ;
+        GetGridRange(minX, maxX, minZ, maxZ);
+        if (m_tiles.empty()) return;
+
+        for (int x = minX - 1; x <= maxX + 1; ++x) {
+            for (int z = minZ - 1; z <= maxZ + 1; ++z) {
+                if (x >= minX && x <= maxX && z >= minZ && z <= maxZ) continue;
+                if (HasTile(x, z)) continue;
+                if (Tile* t = CreateTile(x, z)) {
+                    t->isBorder = true;
+                    t->type = TileType::Sea;
+                }
+            }
         }
     }
 
@@ -413,6 +498,28 @@ namespace gps {
         return true;
     }
 
+    bool TileManager::GetPlayableBounds(glm::vec3& outMin, glm::vec3& outMax) const {
+        const float s = m_tileSize;
+        const float halfW = s;
+        const float halfH = std::sqrt(3.0f) * 0.5f * s;
+        glm::vec3 lo(std::numeric_limits<float>::max());
+        glm::vec3 hi(std::numeric_limits<float>::lowest());
+        bool any = false;
+        for (const auto& p : m_tiles) {
+            if (p.second.isBorder) continue;
+            const glm::vec3& w = p.second.worldPos;
+            lo.x = std::min(lo.x, w.x - halfW);
+            hi.x = std::max(hi.x, w.x + halfW);
+            lo.z = std::min(lo.z, w.z - halfH);
+            hi.z = std::max(hi.z, w.z + halfH);
+            any = true;
+        }
+        if (!any) return false;
+        outMin = glm::vec3(lo.x, -1000.0f, lo.z);
+        outMax = glm::vec3(hi.x,  1000.0f, hi.z);
+        return true;
+    }
+
     void TileManager::GetGridRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const {
         outMinX = 0; outMaxX = 0; outMinZ = 0; outMaxZ = 0;
         bool first = true;
@@ -500,9 +607,11 @@ namespace gps {
 
         // Seteaza transform
         obj->GetTransform().SetPosition(tile.worldPos);
-        obj->GetTransform().SetScale(m_tileModelScale);
+        // Border tiles are decorative; half-scale them so the outer ring reads
+        // as a thinner rectangular frame around the playable grid.
+        obj->GetTransform().SetScale(tile.isBorder ? (m_tileModelScale * 0.5f) : m_tileModelScale);
         obj->GetTransform().SetHeight(heightTile);
-        obj->SetTag("tile");
+        obj->SetTag(tile.isBorder ? "tileBorder" : "tile");
         obj->unitStats.faction= -1;
         obj->unitStats.isAlive = false;
         // Calculeaza bounding sphere
