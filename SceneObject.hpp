@@ -87,6 +87,12 @@ namespace gps {
         float orbitSpeed = 1.0f;   // radians/sec
         float orbitAngle = 0.0f;
         float orbitHeight = 20.0f;
+
+        // Carrier-side tracking: aircraftCarrier remembers its currently-deployed
+        // plane and (when destroyed) a glfwGetTime() timestamp at which to spawn
+        // a replacement. respawnAfter == 0 -> no pending respawn.
+        int   childAircraftID = -1;
+        double respawnAfter   = 0.0;
     };
     /**
      * @brief SceneObject - container pentru un obiect �n scen�

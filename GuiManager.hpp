@@ -70,6 +70,7 @@ namespace gps {
         void RenderMinimap();
         void RenderPauseOverlay();
         void RenderGameStateOverlay();
+        void RenderStartOverlay();
         // Billboard HP bars projected above every alive unit.
         void RenderHealthBars();
 
@@ -100,6 +101,17 @@ namespace gps {
 
         void SetVictory(bool v) { m_victory = v; }
         void SetDefeat(bool v)  { m_defeat = v; }
+
+        // Match flow: pre-game start screen + post-game stats + reset handshake.
+        bool IsGameStarted() const { return m_gameStarted; }
+        void SetGameStarted(bool v) { m_gameStarted = v; }
+        bool ConsumeResetRequest() { bool v = m_resetRequested; m_resetRequested = false; return v; }
+        void SetMatchStats(float elapsedSec, int p1Alive, int p2Alive, int p1Lost, int p2Lost, float oilSpent) {
+            m_matchElapsed = elapsedSec;
+            m_matchP1Alive = p1Alive; m_matchP2Alive = p2Alive;
+            m_matchP1Lost  = p1Lost;  m_matchP2Lost  = p2Lost;
+            m_matchOilSpent = oilSpent;
+        }
 
         // Returns true and writes a world point (Y=0) when the user clicked the minimap
         // this frame, so the camera can be teleported. False otherwise.
@@ -162,6 +174,16 @@ namespace gps {
         bool m_paused;
         bool m_victory;
         bool m_defeat;
+
+        // Match flow
+        bool  m_gameStarted    = false;
+        bool  m_resetRequested = false;
+        float m_matchElapsed   = 0.0f;
+        int   m_matchP1Alive   = 0;
+        int   m_matchP2Alive   = 0;
+        int   m_matchP1Lost    = 0;
+        int   m_matchP2Lost    = 0;
+        float m_matchOilSpent  = 0.0f;
 
         // Minimap click teleport — set in RenderMinimap, drained by main loop
         bool      m_minimapClickPending;

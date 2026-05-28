@@ -200,7 +200,7 @@ namespace gps {
          */
         void ComputeAndSetBoundingSphere(SceneObject* obj, Model3D* model);
 
-        void SetPropPlacement(const std::string& modelName, const std::string& tag, const glm::vec3& scale, const std::string& label);
+        void SetPropPlacement(const std::string& modelName, const std::string& tag, const glm::vec3& scale, const std::string& label, int faction = 1);
 
         void CancelPropPlacement();
         /**
@@ -219,6 +219,7 @@ namespace gps {
         glm::vec3 m_propPlacementScale;
         std::string m_propPlacementLabel;
         bool m_propPlacementMode=false;
+        int  m_propPlacementFaction = 1; // 1 = friendly, 2 = enemy
 
         bool m_bombardmentTargeting = false;
 

@@ -155,13 +155,15 @@ namespace gps {
         return troops;
     }
 
-    void SceneManager::SetPropPlacement(const std::string& modelName,const std::string& tag, const glm::vec3& scale, const std::string& label){
+    void SceneManager::SetPropPlacement(const std::string& modelName,const std::string& tag, const glm::vec3& scale, const std::string& label, int faction){
         m_propPlacementModelName = modelName;
         m_propPlacementTag = tag;
         m_propPlacementScale = scale;
         m_propPlacementLabel = label;
         m_propPlacementMode = true;
-        std::cout << "?? Prop placement mode enabled for model '" << modelName << "'" << std::endl;
+        m_propPlacementFaction = faction;
+        std::cout << "?? Prop placement mode enabled for model '" << modelName
+                  << "' (faction " << faction << ")" << std::endl;
 
     }
     SceneObject* SceneManager::SpawnObject(
@@ -503,6 +505,18 @@ namespace gps {
             stats.faction = 2;
             stats.attackMode = AttackMode::Projectile;
             stats.baseAttackCooldown = 0.05f; // CIWS-like ~20 rounds/sec
+        }
+        else if (tag == "baseP1" || tag == "baseP2")
+        {
+            // Player HQ: huge HP pool, immobile, non-combat. Loss = match over.
+            stats.health = 5000;
+            stats.maxHealth = 5000;
+            stats.attack = 0;
+            stats.attackRange = 0.0f;
+            stats.isCombatUnit = false;
+            stats.isAlive = true;
+            stats.isMovable = false;
+            stats.faction = (tag == "baseP1") ? 1 : 2;
         }
         return stats;
 	}

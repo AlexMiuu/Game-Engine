@@ -64,6 +64,22 @@ namespace gps {
         m_typeModels[static_cast<int>(type)] = model;
     }
 
+    void TileManager::StampIslandAt(int gridX, int gridZ) {
+        SetTileType(gridX, gridZ, TileType::Land);
+        const bool odd = (gridX & 1);
+        const std::array<std::pair<int,int>, 6> nbrs = odd
+            ? std::array<std::pair<int,int>, 6>{ { {gridX+1, gridZ+1}, {gridX+1, gridZ}, {gridX, gridZ-1},
+                                                   {gridX-1, gridZ}, {gridX-1, gridZ+1}, {gridX, gridZ+1} } }
+            : std::array<std::pair<int,int>, 6>{ { {gridX+1, gridZ}, {gridX+1, gridZ-1}, {gridX, gridZ-1},
+                                                   {gridX-1, gridZ-1}, {gridX-1, gridZ}, {gridX, gridZ+1} } };
+        for (const auto& n : nbrs) {
+            Tile* t = GetTile(n.first, n.second);
+            if (t && !t->isBorder && t->type != TileType::Land) {
+                SetTileType(n.first, n.second, TileType::Shallows);
+            }
+        }
+    }
+
     void TileManager::SetTileType(int gridX, int gridZ, TileType newType) {
         Tile* tile = GetTile(gridX, gridZ);
         if (!tile || tile->isBorder) return;
@@ -256,10 +272,12 @@ namespace gps {
     // ===========================
     // PROCEDURAL TYPE ASSIGNMENT
     // ===========================
-    // Cluster-based: pick a few island seeds, BFS-grow them with decaying
-    // probability, ring the islands with Shallows, then scatter Oil/Fish in
-    // the remaining Sea tiles. Skips border tiles entirely.
+    // Cluster-based: pick several spread-out island seeds, BFS-grow each with a
+    // per-island max depth + decaying probability, ring islands with Shallows,
+    // then scatter Oil/Fish in remaining Sea tiles. Skips border tiles entirely.
+    // seed=0 -> non-deterministic (random_device); otherwise deterministic.
     void TileManager::AssignProceduralTypes(unsigned seed) {
+        if (seed == 0) seed = std::random_device{}();
         std::mt19937 rng(seed);
         std::uniform_real_distribution<float> roll(0.0f, 1.0f);
 
@@ -287,23 +305,43 @@ namespace gps {
             return out;
         };
 
-        // Island count scales with grid size; growth rolls keep each island
-        // small (~3-4 tile radius) so they read as patches, not continents.
-        const int maxSeeds = std::min<int>(6, std::max<int>(2, (int)playable.size() / 25));
-        const int numSeeds = 2 + (rng() % std::max(1, maxSeeds - 1));
-        std::shuffle(playable.begin(), playable.end(), rng);
+        // Modest island count: enough variety so the map doesn't read as
+        // "2 blobs + ocean", but not so many it becomes a continent.
+        const int maxSeeds  = std::min<int>(7, std::max<int>(3, (int)playable.size() / 60));
+        const int numSeeds  = std::max(3, 3 + (int)(rng() % std::max(1, maxSeeds - 2)));
 
-        for (int s = 0; s < numSeeds && s < (int)playable.size(); ++s) {
+        // Spread seeds out so islands don't all merge into one blob.
+        std::shuffle(playable.begin(), playable.end(), rng);
+        std::vector<GridKey> seeds;
+        seeds.reserve(numSeeds);
+        const float minSeedDistSq = 8.0f * 8.0f;
+        for (const GridKey& k : playable) {
+            bool tooClose = false;
+            for (const GridKey& s : seeds) {
+                const float dx = (float)(k.x - s.x);
+                const float dz = (float)(k.z - s.z);
+                if (dx * dx + dz * dz < minSeedDistSq) { tooClose = true; break; }
+            }
+            if (!tooClose) seeds.push_back(k);
+            if ((int)seeds.size() >= numSeeds) break;
+        }
+
+        // Per-island max depth varies (small specks + a couple of bigger islands).
+        for (const GridKey& sk : seeds) {
+            const int maxDepth = 2 + (int)(rng() % 3); // 2..4 tile radius
             std::vector<std::pair<GridKey, int>> stack;
-            stack.push_back({ playable[s], 0 });
+            stack.push_back({ sk, 0 });
             while (!stack.empty()) {
                 auto [k, depth] = stack.back(); stack.pop_back();
                 Tile* t = GetTile(k.x, k.z);
                 if (!t || t->isBorder) continue;
                 if (t->type == TileType::Land) continue;
-                const float pGrow = 0.78f - depth * 0.24f;
+                if (depth > maxDepth) {
+                    if (t->type == TileType::Sea) t->type = TileType::Shallows;
+                    continue;
+                }
+                const float pGrow = 0.82f - depth * 0.18f;
                 if (roll(rng) > pGrow) {
-                    // Failed roll on the edge of an island -> sandy shallows ring.
                     if (depth > 0 && t->type == TileType::Sea) t->type = TileType::Shallows;
                     continue;
                 }
@@ -313,13 +351,13 @@ namespace gps {
             }
         }
 
-        // Sparse Oil/Fish scattered in remaining Sea tiles.
+        // Sparse Oil/Fish in remaining Sea tiles so the open sea has variety.
         for (auto& p : m_tiles) {
             Tile& t = p.second;
             if (t.isBorder || t.type != TileType::Sea) continue;
             float r = roll(rng);
-            if      (r < 0.08f) t.type = TileType::Oil;
-            else if (r < 0.16f) t.type = TileType::Fish;
+            if      (r < 0.09f) t.type = TileType::Oil;
+            else if (r < 0.18f) t.type = TileType::Fish;
         }
     }
 
@@ -524,6 +562,24 @@ namespace gps {
         outMinX = 0; outMaxX = 0; outMinZ = 0; outMaxZ = 0;
         bool first = true;
         for (const auto& pair : m_tiles) {
+            if (first) {
+                outMinX = outMaxX = pair.first.x;
+                outMinZ = outMaxZ = pair.first.z;
+                first = false;
+            } else {
+                if (pair.first.x < outMinX) outMinX = pair.first.x;
+                if (pair.first.x > outMaxX) outMaxX = pair.first.x;
+                if (pair.first.z < outMinZ) outMinZ = pair.first.z;
+                if (pair.first.z > outMaxZ) outMaxZ = pair.first.z;
+            }
+        }
+    }
+
+    void TileManager::GetPlayableRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const {
+        outMinX = 0; outMaxX = 0; outMinZ = 0; outMaxZ = 0;
+        bool first = true;
+        for (const auto& pair : m_tiles) {
+            if (pair.second.isBorder) continue;
             if (first) {
                 outMinX = outMaxX = pair.first.x;
                 outMinZ = outMaxZ = pair.first.z;

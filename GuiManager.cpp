@@ -122,6 +122,7 @@ namespace gps {
         if (m_showHelp)       RenderHelpOverlay();
         if (m_paused)         RenderPauseOverlay();
         if (m_victory || m_defeat) RenderGameStateOverlay();
+        if (!m_gameStarted && !m_victory && !m_defeat) RenderStartOverlay();
 
         RenderHealthBars();
     }
@@ -232,58 +233,89 @@ namespace gps {
 
     void GuiManager::RenderSpawnPanel(){
         ImGui::SetNextWindowPos(ImVec2(10, 45), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(280, 480), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(300, 540), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Spawn Units", nullptr);
 
         const float oil  = gps::ResourceManager::Instance().Get("Oil");
         const bool  poor = oil < kPropPlacementOilCost;
 
+        // Faction toggle: every spawnable can be placed as friendly OR enemy.
+        // The faction is stored on SceneManager's prop-placement state and
+        // applied to the spawned object's UnitStats in main.cpp.
+        static int factionChoice = 1; // 1 = friendly, 2 = enemy
+        const bool  isEnemy = (factionChoice == 2);
+        const ImVec4 friendlyCol(0.10f, 0.45f, 0.85f, 1.0f);
+        const ImVec4 enemyCol   (0.85f, 0.20f, 0.20f, 1.0f);
+        const ImVec4 accent     = isEnemy ? enemyCol : friendlyCol;
+        const ImVec4 accentHi(accent.x * 1.25f, accent.y * 1.25f, accent.z * 1.25f, 1.0f);
+
+        // Big banner so the player can never mistake which side they're placing for.
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(accent.x * 0.35f, accent.y * 0.35f, accent.z * 0.35f, 1.0f));
+        ImGui::BeginChild("##factionBanner", ImVec2(0, 56), true);
+        ImGui::SetWindowFontScale(1.15f);
+        ImGui::TextColored(accent, isEnemy ? "ENEMY (P2)" : "FRIENDLY (P1)");
+        ImGui::SetWindowFontScale(1.0f);
+        ImGui::TextColored(ImVec4(0.85f, 0.85f, 0.9f, 1.0f),
+            "Choose a side, then pick a unit below.");
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+
+        // Faction radio — same row, equal width.
+        const float half = (ImGui::GetContentRegionAvail().x - 6.0f) * 0.5f;
+        ImGui::PushStyleColor(ImGuiCol_Button,        factionChoice == 1 ? friendlyCol : ImVec4(0.18f, 0.18f, 0.20f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(friendlyCol.x * 1.25f, friendlyCol.y * 1.25f, friendlyCol.z * 1.25f, 1.0f));
+        if (ImGui::Button("Friendly (P1)", ImVec2(half, 28))) factionChoice = 1;
+        ImGui::PopStyleColor(2);
+        ImGui::SameLine();
+        ImGui::PushStyleColor(ImGuiCol_Button,        factionChoice == 2 ? enemyCol : ImVec4(0.18f, 0.18f, 0.20f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(enemyCol.x * 1.25f, enemyCol.y * 1.25f, enemyCol.z * 1.25f, 1.0f));
+        if (ImGui::Button("Enemy (P2)", ImVec2(half, 28))) factionChoice = 2;
+        ImGui::PopStyleColor(2);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
         auto spawnEntry = [&](const char* label, const char* tooltip,
                               const std::string& model, const std::string& tag,
-                              float scale, const std::string& displayName,
-                              ImVec4 base, ImVec4 hover)
+                              float scale, const std::string& displayName)
         {
             if (poor) ImGui::BeginDisabled();
             char fullLabel[96];
-            snprintf(fullLabel, sizeof(fullLabel), "%s\n(%.0f Oil)", label, kPropPlacementOilCost);
-            if (ColoredButton(fullLabel, ImVec2(-1, 44), base, hover)) {
+            snprintf(fullLabel, sizeof(fullLabel), "%s%s\n(%.0f Oil)",
+                     isEnemy ? "[E] " : "", label, kPropPlacementOilCost);
+            if (ColoredButton(fullLabel, ImVec2(-1, 44), accent, accentHi)) {
                 if (m_sceneManager) {
-                    m_sceneManager->SetPropPlacement(model, tag, glm::vec3(scale), displayName);
+                    m_sceneManager->SetPropPlacement(model, tag, glm::vec3(scale), displayName, factionChoice);
                 }
             }
             if (poor) ImGui::EndDisabled();
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s\nCost: %.0f Oil\nLeft-click on the map to place, right-click or X to cancel.",
-                                  tooltip, kPropPlacementOilCost);
+                ImGui::SetTooltip("%s\nFaction: %s\nCost: %.0f Oil\nLeft-click to place, right-click or X to cancel.",
+                                  tooltip, isEnemy ? "Enemy (P2)" : "Friendly (P1)", kPropPlacementOilCost);
             }
         };
 
-        const ImVec4 green     = ImVec4(0.2f, 0.45f, 0.2f, 1.0f);
-        const ImVec4 greenHi   = ImVec4(0.25f, 0.6f, 0.25f, 1.0f);
-        const ImVec4 red       = ImVec4(0.7f, 0.1f, 0.1f, 1.0f);
-
         ImGui::SeparatorText("Combat Units");
-        spawnEntry("Spawn Ship",     "Light combat ship. Projectile attack, mid range.",
-                   "ship", "ship", 4.5f, "Ship", green, greenHi);
-        spawnEntry("Spawn Frigate",  "Frigate. Long-range projectile attacker.",
-                   "frigate", "frigate", 4.5f, "Frigate", green, greenHi);
-        spawnEntry("Spawn Destroyer","Destroyer. AOE splash projectile, high HP.",
-                   "destroyer", "destroyer", 4.5f, "destroyer", green, greenHi);
-        spawnEntry("Spawn Carrier",  "Aircraft Carrier. Orbiting plane harasser.",
-                   "aircraftCarrier", "aircraftCarrier", 4.5f, "AircraftCarrier", green, greenHi);
-        spawnEntry("Spawn Enemy Frigate", "Spawns an enemy-team ship for combat testing.",
-                   "ship", "enemyShip", 4.5f, "EnemyShip", red, red);
+        spawnEntry("Ship",      "Light combat ship. Projectile attack, mid range.",
+                   "ship", "ship", 4.5f, "Ship");
+        spawnEntry("Frigate",   "Frigate. Long-range projectile attacker.",
+                   "frigate", "frigate", 4.5f, "Frigate");
+        spawnEntry("Destroyer", "Destroyer. AOE splash projectile, high HP.",
+                   "destroyer", "destroyer", 4.5f, "Destroyer");
+        spawnEntry("Carrier",   "Aircraft Carrier. Deploys an orbiting plane; respawns it on death.",
+                   "aircraftCarrier", "aircraftCarrier", 4.5f, "AircraftCarrier");
 
         ImGui::SeparatorText("Resource Units");
         spawnEntry("Oil Rig",  "Stationary oil extractor. Produces Oil over time.",
-                   "oilRig", "oilRig", 2.5f, "OilRig", green, greenHi);
+                   "oilRig", "oilRig", 2.5f, "OilRig");
         spawnEntry("Fish Boat","Fish boat. Only produces Fish while parked on a Fish tile.",
-                   "fishBoat", "fishBoat", 4.5f, "FishBoat", green, greenHi);
+                   "fishBoat", "fishBoat", 4.5f, "FishBoat");
 
         ImGui::SeparatorText("Buildings");
-        spawnEntry("Spawn CIWS","CIWS turret. Stationary, very fast fire rate.",
-                   "turret", "turret", 10.5f, "Turret", green, greenHi);
+        spawnEntry("CIWS Turret","CIWS turret. Stationary, very fast fire rate.",
+                   "turret", "turret", 10.5f, "Turret");
 
         if (poor) {
             ImGui::Spacing();
@@ -302,11 +334,51 @@ namespace gps {
         if (!m_scene) return;
 
         ImGui::SetNextWindowPos(ImVec2(10, 45), ImGuiCond_FirstUseEver);
-        ImGui::SetNextWindowSize(ImVec2(320, 420), ImGuiCond_FirstUseEver);
+        ImGui::SetNextWindowSize(ImVec2(340, 520), ImGuiCond_FirstUseEver);
 
         ImGui::Begin("Inspector", nullptr);
 
-        // Tool selector
+        // Colored X/Y/Z drag — reset button + drag per axis. Returns true on any change.
+        auto Vec3Control = [](const char* label, glm::vec3& v, float speed, float resetVal) -> bool {
+            bool changed = false;
+            ImGui::PushID(label);
+            ImGui::TextUnformatted(label);
+
+            const float btn = ImGui::GetFrameHeight();
+            const float w   = std::max(40.0f, (ImGui::GetContentRegionAvail().x - 3 * btn - 18.0f) / 3.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(2, 2));
+
+            struct Axis { const char* lbl; float* val; ImVec4 col; ImVec4 hov; };
+            Axis ax[3] = {
+                { "X", &v.x, ImVec4(0.80f, 0.20f, 0.22f, 1.0f), ImVec4(0.95f, 0.30f, 0.30f, 1.0f) },
+                { "Y", &v.y, ImVec4(0.25f, 0.70f, 0.25f, 1.0f), ImVec4(0.35f, 0.85f, 0.35f, 1.0f) },
+                { "Z", &v.z, ImVec4(0.22f, 0.40f, 0.85f, 1.0f), ImVec4(0.32f, 0.55f, 0.98f, 1.0f) },
+            };
+            for (int i = 0; i < 3; ++i) {
+                if (i > 0) ImGui::SameLine();
+                ImGui::PushStyleColor(ImGuiCol_Button,        ax[i].col);
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ax[i].hov);
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ax[i].hov);
+                if (ImGui::Button(ax[i].lbl, ImVec2(btn, btn))) { *ax[i].val = resetVal; changed = true; }
+                ImGui::PopStyleColor(3);
+                ImGui::SameLine();
+                ImGui::SetNextItemWidth(w);
+                char id[8]; snprintf(id, sizeof(id), "##%s", ax[i].lbl);
+                if (ImGui::DragFloat(id, ax[i].val, speed, 0.0f, 0.0f, "%.2f")) changed = true;
+            }
+            ImGui::PopStyleVar();
+            ImGui::PopID();
+            return changed;
+        };
+
+        // Tile-type combo helper. Sets `outTile` to first selected tile for header context.
+        auto TileTypeCombo = [&](const char* labelId, int& current) -> bool {
+            static const char* kTypeNames[] = { "Sea", "Oil", "Fish", "Shallows", "Land" };
+            ImGui::SetNextItemWidth(-1);
+            return ImGui::Combo(labelId, &current, kTypeNames, IM_ARRAYSIZE(kTypeNames));
+        };
+
+        // ─── Tool selector ───
         ImGui::SeparatorText("Tool");
         EditTool currentTool = m_editorState->GetActiveTool();
         if (ImGui::RadioButton("Translate (G)", currentTool == EditTool::Translate))
@@ -318,101 +390,170 @@ namespace gps {
         ImGui::Spacing();
 
         if (!m_selectionSystem || !m_selectionSystem->HasSelection()) {
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "No object selected.");
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "Click an object to select it.");
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.10f, 0.10f, 0.14f, 1.0f));
+            ImGui::BeginChild("##empty", ImVec2(0, 80), true);
+            ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 18.0f);
+            ImGui::SetWindowFontScale(1.1f);
+            const char* msg = "Nothing selected";
+            float tw = ImGui::CalcTextSize(msg).x;
+            ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x - tw) * 0.5f);
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f), "%s", msg);
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::Spacing();
+            const char* hint = "Click an object or drag a box to select.";
+            tw = ImGui::CalcTextSize(hint).x;
+            ImGui::SetCursorPosX((ImGui::GetContentRegionAvail().x - tw) * 0.5f);
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "%s", hint);
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
             ImGui::End();
             return;
         }
 
         const auto& selectedIDs = m_selectionSystem->GetSelectedIDs();
+        const size_t selCount   = selectedIDs.size();
 
-        if (selectedIDs.size() == 1) {
-            int id = *selectedIDs.begin();
-            SceneObject* obj = m_scene->GetObjectByID(id);
-            if (!obj) { ImGui::End(); return; }
-
-            // Object info
-            ImGui::SeparatorText("Object");
-            ImGui::Text("Name: %s", obj->GetName().c_str());
-            ImGui::Text("ID: %d  |  Tag: %s", obj->GetID(), obj->GetTag().c_str());
-
-            // Transform - Position
-            ImGui::SeparatorText("Position");
-            glm::vec3 pos = obj->GetTransform().GetPosition();
-            if (ImGui::DragFloat3("##Pos", &pos.x, 1.0f)) {
-                obj->GetTransform().SetPosition(pos);
-                obj->UpdateWorldBounds();
+        // ─── Header card (object name / "N selected") ───
+        ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.12f, 0.10f, 0.07f, 1.0f));
+        ImGui::BeginChild("##header", ImVec2(0, 56), true);
+        if (selCount == 1) {
+            SceneObject* obj = m_scene->GetObjectByID(*selectedIDs.begin());
+            if (obj) {
+                ImGui::SetWindowFontScale(1.25f);
+                ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%s", obj->GetName().c_str());
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f),
+                    "ID %d   |   Tag: %s", obj->GetID(), obj->GetTag().c_str());
             }
+        } else {
+            ImGui::SetWindowFontScale(1.25f);
+            ImGui::TextColored(ImVec4(1.0f, 0.85f, 0.3f, 1.0f), "%zu objects selected", selCount);
+            ImGui::SetWindowFontScale(1.0f);
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f),
+                "Transforms apply to the whole group.");
+        }
+        ImGui::EndChild();
+        ImGui::PopStyleColor();
+        ImGui::Spacing();
 
-            // Transform - Rotation
-            ImGui::SeparatorText("Rotation");
-            glm::vec3 rot = obj->GetTransform().GetRotation();
-            if (ImGui::DragFloat3("##Rot", &rot.x, 1.0f, -360.0f, 360.0f)) {
-                obj->GetTransform().SetRotation(rot);
-                obj->UpdateWorldBounds();
+        // ─── Transform editing (works for single AND multi-select) ───
+        // Multi-select strategy: drag the centroid/first values; apply the delta
+        // (or multiplicative ratio for scale) to every selected object.
+        glm::vec3 centroid(0.0f);
+        glm::vec3 refRot(0.0f), refScl(1.0f);
+        int n = 0;
+        SceneObject* firstObj = nullptr;
+        for (int id : selectedIDs) {
+            SceneObject* o = m_scene->GetObjectByID(id);
+            if (!o) continue;
+            centroid += o->GetTransform().GetPosition();
+            if (!firstObj) {
+                firstObj = o;
+                refRot   = o->GetTransform().GetRotation();
+                refScl   = o->GetTransform().GetScale();
             }
+            n++;
+        }
+        if (n == 0) { ImGui::End(); return; }
+        centroid /= static_cast<float>(n);
 
-            // Transform - Scale
-            ImGui::SeparatorText("Scale");
-            glm::vec3 scl = obj->GetTransform().GetScale();
-            if (ImGui::DragFloat3("##Scl", &scl.x, 0.1f, 0.01f, 100.0f)) {
-                obj->GetTransform().SetScale(scl);
-                obj->UpdateWorldBounds();
+        auto applyToAll = [&](auto fn) {
+            for (int id : selectedIDs) {
+                SceneObject* o = m_scene->GetObjectByID(id);
+                if (!o) continue;
+                fn(o);
+                o->UpdateWorldBounds();
             }
+        };
 
-            // Uniform scale
-            ImGui::Spacing();
-            float uniScale = scl.x;
-            if (ImGui::SliderFloat("Uniform Scale", &uniScale, 0.1f, 50.0f)) {
-                obj->GetTransform().SetScale(uniScale);
-                obj->UpdateWorldBounds();
+        ImGui::SeparatorText("Transform");
+
+        // Position — drag centroid, apply additive delta to every selected.
+        glm::vec3 newCentroid = centroid;
+        if (Vec3Control("Position", newCentroid, 1.0f, 0.0f)) {
+            glm::vec3 delta = newCentroid - centroid;
+            applyToAll([&](SceneObject* o) { o->GetTransform().Translate(delta); });
+        }
+
+        // Rotation — drag first object's rotation, apply additive delta to all.
+        glm::vec3 newRot = refRot;
+        if (Vec3Control("Rotation", newRot, 1.0f, 0.0f)) {
+            glm::vec3 delta = newRot - refRot;
+            applyToAll([&](SceneObject* o) { o->GetTransform().Rotate(delta); });
+        }
+
+        // Scale — multiplicative ratio so units with different starting scales
+        // keep their relative size when the group is scaled.
+        glm::vec3 newScl = refScl;
+        if (Vec3Control("Scale", newScl, 0.05f, 1.0f)) {
+            glm::vec3 ratio(
+                refScl.x > 0.001f ? newScl.x / refScl.x : 1.0f,
+                refScl.y > 0.001f ? newScl.y / refScl.y : 1.0f,
+                refScl.z > 0.001f ? newScl.z / refScl.z : 1.0f);
+            applyToAll([&](SceneObject* o) {
+                glm::vec3 cur = o->GetTransform().GetScale();
+                o->GetTransform().SetScale(cur * ratio);
+            });
+        }
+
+        // Uniform scale slider — multiplies every selected object's scale.
+        ImGui::Spacing();
+        float uni = refScl.x;
+        if (ImGui::SliderFloat("Uniform Scale", &uni, 0.1f, 50.0f)) {
+            float ratio = (refScl.x > 0.001f) ? (uni / refScl.x) : 1.0f;
+            applyToAll([&](SceneObject* o) {
+                o->GetTransform().SetScale(o->GetTransform().GetScale() * ratio);
+            });
+        }
+
+        // ─── Tile type (single or bulk; same combo, applied to every selected tile) ───
+        if (m_tileManager) {
+            std::vector<int> tileIDs;
+            for (int id : selectedIDs) {
+                SceneObject* o = m_scene->GetObjectByID(id);
+                if (o && o->GetTag() == "tile") tileIDs.push_back(id);
             }
-
-            // Single-tile type editor.
-            if (m_tileManager && obj->GetTag() == "tile") {
-                int gx, gz;
-                m_tileManager->WorldToGrid(obj->GetTransform().GetPosition(), gx, gz);
-                if (Tile* tile = m_tileManager->GetTile(gx, gz)) {
-                    ImGui::SeparatorText("Tile Type");
-                    static const char* kTypeNames[] = { "Sea", "Oil", "Fish", "Shallows", "Land" };
-                    int current = static_cast<int>(tile->type);
-                    if (ImGui::Combo("##TileType", &current, kTypeNames, IM_ARRAYSIZE(kTypeNames))) {
-                        m_tileManager->SetTileType(gx, gz, static_cast<TileType>(current));
+            if (!tileIDs.empty()) {
+                ImGui::SeparatorText(tileIDs.size() == 1 ? "Tile Type" : "Tile Type (Bulk)");
+                // Seed combo with the first selected tile's type so it isn't visually stuck.
+                int current = 0;
+                if (SceneObject* first = m_scene->GetObjectByID(tileIDs.front())) {
+                    int gx, gz;
+                    m_tileManager->WorldToGrid(first->GetTransform().GetPosition(), gx, gz);
+                    if (Tile* t = m_tileManager->GetTile(gx, gz)) current = static_cast<int>(t->type);
+                }
+                if (TileTypeCombo("##TileType", current)) {
+                    TileType newType = static_cast<TileType>(current);
+                    for (int id : tileIDs) {
+                        SceneObject* o = m_scene->GetObjectByID(id);
+                        if (!o) continue;
+                        int gx, gz;
+                        m_tileManager->WorldToGrid(o->GetTransform().GetPosition(), gx, gz);
+                        m_tileManager->SetTileType(gx, gz, newType);
                     }
                 }
             }
         }
-        else {
-            ImGui::SeparatorText("Multiple Selection");
-            ImGui::Text("%zu objects selected", selectedIDs.size());
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f),
-                "Select a single object to edit its transform.");
 
-            // Multi-tile type editor: apply the chosen TileType to every
-            // selected tile. Only fires the frame the combo actually changes
-            // (Combo() returns true once) so we don't hammer SetTileType.
-            if (m_tileManager) {
-                bool anyTile = false;
-                for (int id : selectedIDs) {
-                    SceneObject* o = m_scene->GetObjectByID(id);
-                    if (o && o->GetTag() == "tile") { anyTile = true; break; }
-                }
-                if (anyTile) {
-                    ImGui::SeparatorText("Tile Type (Bulk)");
-                    static const char* kTypeNames[] = { "Sea", "Oil", "Fish", "Shallows", "Land" };
-                    static int bulkChoice = 0;
-                    if (ImGui::Combo("##BulkTileType", &bulkChoice, kTypeNames, IM_ARRAYSIZE(kTypeNames))) {
-                        TileType newType = static_cast<TileType>(bulkChoice);
-                        for (int id : selectedIDs) {
-                            SceneObject* o = m_scene->GetObjectByID(id);
-                            if (!o || o->GetTag() != "tile") continue;
-                            int gx, gz;
-                            m_tileManager->WorldToGrid(o->GetTransform().GetPosition(), gx, gz);
-                            m_tileManager->SetTileType(gx, gz, newType);
-                        }
-                    }
+        // ─── Quick stats footer for multi-select (faction counts, etc.) ───
+        if (selCount > 1) {
+            ImGui::Spacing();
+            ImGui::SeparatorText("Selection");
+            int p1 = 0, p2 = 0, neutral = 0, tiles = 0;
+            for (int id : selectedIDs) {
+                SceneObject* o = m_scene->GetObjectByID(id);
+                if (!o) continue;
+                if (o->GetTag() == "tile") { tiles++; continue; }
+                switch (o->unitStats.faction) {
+                    case 1:  p1++;      break;
+                    case 2:  p2++;      break;
+                    default: neutral++; break;
                 }
             }
+            if (p1)      ImGui::TextColored(ImVec4(0.3f, 0.7f, 1.0f, 1.0f), "P1 units: %d", p1);
+            if (p2)      ImGui::TextColored(ImVec4(1.0f, 0.4f, 0.4f, 1.0f), "P2 units: %d", p2);
+            if (neutral) ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Neutral:  %d", neutral);
+            if (tiles)   ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Tiles:    %d", tiles);
         }
 
         ImGui::End();
@@ -617,11 +758,11 @@ namespace gps {
 
         ImGuiViewport* viewport = ImGui::GetMainViewport();
 
-        float panelWidth = 320.0f;
-        float panelHeight = 150.0f;
+        float panelWidth = 380.0f;
+        float panelHeight = 215.0f;
         float margin = 10.0f;
 
-        // Centrat jos
+        // Centered along the bottom edge.
         ImGui::SetNextWindowPos(
             ImVec2(viewport->WorkPos.x + (viewport->WorkSize.x - panelWidth) * 0.5f,
                 viewport->WorkPos.y + viewport->WorkSize.y - panelHeight - margin),
@@ -634,8 +775,24 @@ namespace gps {
             ImGuiWindowFlags_NoCollapse |
             ImGuiWindowFlags_NoSavedSettings;
 
-        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.10f, 0.92f));
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.10f, 0.94f));
         ImGui::Begin("Unit Info", nullptr, flags);
+
+        // Faction → colored accent shared between header tint, HP bar, badge.
+        auto factionColor = [](int f) -> ImVec4 {
+            switch (f) {
+                case 1:  return ImVec4(0.20f, 0.55f, 1.00f, 1.0f); // blue — player
+                case 2:  return ImVec4(0.95f, 0.30f, 0.30f, 1.0f); // red  — enemy
+                default: return ImVec4(0.80f, 0.80f, 0.85f, 1.0f); // grey — neutral
+            }
+        };
+        auto factionLabel = [](int f) -> const char* {
+            switch (f) {
+                case 1:  return "P1";
+                case 2:  return "P2";
+                default: return "Neutral";
+            }
+        };
 
         const auto& selectedIDs = m_selectionSystem->GetSelectedIDs();
         size_t count = selectedIDs.size();
@@ -646,132 +803,95 @@ namespace gps {
             SceneObject* obj = m_scene->GetObjectByID(id);
 
             if (obj) {
-                // Nume mare
-                ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.3f, 1.0f));
-                ImGui::Text("%s", obj->GetName().c_str());
+                const ImVec4 col = factionColor(obj->unitStats.faction);
+
+                // Header: faction-tinted card with big name + side badge.
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(col.x * 0.22f, col.y * 0.22f, col.z * 0.22f, 1.0f));
+                ImGui::BeginChild("##unitHdr", ImVec2(0, 50), true);
+                ImGui::SetWindowFontScale(1.3f);
+                ImGui::TextColored(ImVec4(1.0f, 0.92f, 0.5f, 1.0f), "%s", obj->GetName().c_str());
+                ImGui::SetWindowFontScale(1.0f);
+                ImGui::TextColored(col, "[%s]", factionLabel(obj->unitStats.faction));
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.75f, 1.0f),
+                    "  %s  |  ID %d", obj->GetTag().c_str(), obj->GetID());
+                ImGui::EndChild();
                 ImGui::PopStyleColor();
-                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f),
-                    "Tag: %s   Attack: %d",
-                    obj->GetTag().c_str(), obj->unitStats.attack);
 
-                ImGui::SameLine();
-                ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "(ID: %d)", obj->GetID());
-
-                ImGui::Separator();
-                
-            if(obj->unitStats.isCombatUnit==true)
-            {
-                ImGui::Text("Upgrades");
-
-                ImGui::BulletText("Attack: %d",   obj->unitStats.attack);
-                ImGui::BulletText("Range: %.0f",  obj->unitStats.attackRange);
-
-                if (ImGui::Button("Upgrade Attack", ImVec2(120, 24))) {
-                    obj->unitStats.attack += 10;
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Permanently add +10 to this unit's attack damage.");
-
-                ImGui::SameLine();
-
-                if (ImGui::Button("Upgrade Range", ImVec2(120, 24))) {
-                    obj->unitStats.attackRange += 10.0f;
-                }
-                if (ImGui::IsItemHovered())
-                    ImGui::SetTooltip("Permanently add +10 to this unit's attack range.");
-            }
-                ImGui::Separator();
-
-                // Position
-                glm::vec3 pos = obj->GetTransform().GetPosition();
-                ImGui::Text("Position: (%.1f, %.1f, %.1f)", pos.x, pos.y, pos.z);
-
-                // Scale
-                glm::vec3 scl = obj->GetTransform().GetScale();
-                ImGui::Text("Scale: (%.2f, %.2f, %.2f)", scl.x, scl.y, scl.z);
-
-                // Bounding info
-                ImGui::Text("Bounds radius: %.1f", obj->GetWorldRadius());
-
-                // HP bar
+                // HP bar — big, color tied to fraction.
                 if (obj->unitStats.maxHealth > 0) {
                     float frac = (float)obj->unitStats.health / (float)obj->unitStats.maxHealth;
                     ImVec4 barColor = (frac > 0.6f) ? ImVec4(0.2f, 0.8f, 0.2f, 1.0f) :
                                      (frac > 0.3f) ? ImVec4(1.0f, 0.7f, 0.1f, 1.0f) :
                                                      ImVec4(0.9f, 0.15f, 0.15f, 1.0f);
-                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
                     char hpLabel[32];
-                    snprintf(hpLabel, sizeof(hpLabel), "%d / %d HP",
+                    snprintf(hpLabel, sizeof(hpLabel), "HP  %d / %d",
                         obj->unitStats.health, obj->unitStats.maxHealth);
-                    ImGui::ProgressBar(frac, ImVec2(-1.0f, 14.0f), hpLabel);
+                    ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+                    ImGui::ProgressBar(frac, ImVec2(-1.0f, 22.0f), hpLabel);
                     ImGui::PopStyleColor();
-
-                    if (obj->unitStats.productionRate > 0.0f) {
-                        ImGui::TextColored(ImVec4(0.8f, 0.9f, 0.4f, 1.0f),
-                            "Producing: %.1f %s/s",
-                            obj->unitStats.productionRate,
-                            obj->unitStats.resourceType.c_str());
-                    }
                 }
 
-                // Combat stance (combat units only)
+                // Inline stat strip — colored, short. Combat = ATK / RNG, builder = prod.
                 if (obj->unitStats.isCombatUnit) {
-                    static const char* kStanceNames[] = { "Neutral", "Aggressive", "Defensive" };
-                    int s = (int)obj->unitStats.stance;
-                    ImGui::SetNextItemWidth(140.0f);
-                    if (ImGui::Combo("Stance", &s, kStanceNames, IM_ARRAYSIZE(kStanceNames)))
-                        obj->unitStats.stance = (CombatStance)s;
+                    ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f), "ATK %d", obj->unitStats.attack);
+                    ImGui::SameLine(0, 18);
+                    ImGui::TextColored(ImVec4(0.45f, 0.85f, 1.0f, 1.0f), "RNG %.0f", obj->unitStats.attackRange);
+                    if (obj->unitStats.splashRadius > 0.0f) {
+                        ImGui::SameLine(0, 18);
+                        ImGui::TextColored(ImVec4(1.0f, 0.8f, 0.4f, 1.0f),
+                            "AOE %.0f", obj->unitStats.splashRadius);
+                    }
+                } else if (obj->unitStats.productionRate > 0.0f) {
+                    ImGui::TextColored(ImVec4(0.8f, 0.9f, 0.4f, 1.0f),
+                        "Producing %.1f %s/s",
+                        obj->unitStats.productionRate, obj->unitStats.resourceType.c_str());
                 }
 
-                // Moving status
+                // Movement / idle status — single line with eta when moving.
+                ImGui::SameLine(0, 18);
                 if (obj->movement.isMoving) {
-                    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Moving...");
-
-                    // Progress bar
                     float now = static_cast<float>(glfwGetTime());
                     float elapsed = now - obj->movement.moveStartTime;
                     float progress = std::min(elapsed / obj->movement.moveDuration, 1.0f);
-                    ImGui::ProgressBar(progress, ImVec2(-1, 14));
+                    ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f), "Moving (%.0f%%)", progress * 100.0f);
+                } else {
+                    ImGui::TextColored(ImVec4(0.5f, 0.85f, 0.55f, 1.0f), "Idle");
                 }
-                else {
-                    ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "Idle");
+
+                // Compact action bar — stance combo + upgrades on the same row.
+                if (obj->unitStats.isCombatUnit) {
+                    ImGui::Spacing();
+                    static const char* kStanceNames[] = { "Neutral", "Aggressive", "Defensive" };
+                    int s = (int)obj->unitStats.stance;
+                    ImGui::SetNextItemWidth(130.0f);
+                    if (ImGui::Combo("##Stance", &s, kStanceNames, IM_ARRAYSIZE(kStanceNames)))
+                        obj->unitStats.stance = (CombatStance)s;
+                    ImGui::SameLine();
+                    if (ImGui::Button("+10 ATK", ImVec2(80, 22))) obj->unitStats.attack += 10;
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Permanent +10 attack damage.");
+                    ImGui::SameLine();
+                    if (ImGui::Button("+10 RNG", ImVec2(80, 22))) obj->unitStats.attackRange += 10.0f;
+                    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Permanent +10 attack range.");
                 }
             }
         }
         else {
             // ─── MULTIPLE UNITS SELECTED ───
-            ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.85f, 0.3f, 1.0f));
-            ImGui::Text("%zu units selected", count);
-            ImGui::PopStyleColor();
-
-            ImGui::Separator();
-
-            // Breakdown pe tipuri
-            int orcCount = 0;
-            int troopCount = 0;
-            int otherCount = 0;
-            int movingCount = 0;
-            int combatCount = 0;
-            int firstStance = -1;
-            bool stanceMixed = false;
-            int hpSum = 0;
-            int hpMaxSum = 0;
-            int attackSum = 0;
+            int p1 = 0, p2 = 0, neutralC = 0;
+            int movingCount = 0, combatCount = 0;
+            int firstStance = -1; bool stanceMixed = false;
+            int hpSum = 0, hpMaxSum = 0, attackSum = 0;
 
             for (int id : selectedIDs) {
                 SceneObject* obj = m_scene->GetObjectByID(id);
                 if (!obj) continue;
-
-                std::string name = obj->GetName();
-                if (name.find("Orc") != std::string::npos) orcCount++;
-                else if (name.find("Troop") != std::string::npos) troopCount++;
-                else otherCount++;
-
+                if      (obj->unitStats.faction == 1) p1++;
+                else if (obj->unitStats.faction == 2) p2++;
+                else                                  neutralC++;
                 if (obj->movement.isMoving) movingCount++;
-
                 hpSum    += obj->unitStats.health;
                 hpMaxSum += obj->unitStats.maxHealth;
-
                 if (obj->unitStats.isCombatUnit) {
                     int s = (int)obj->unitStats.stance;
                     if (firstStance == -1) firstStance = s;
@@ -781,37 +901,55 @@ namespace gps {
                 }
             }
 
-            if (orcCount > 0)   ImGui::Text("  Orcs: %d", orcCount);
-            if (troopCount > 0) ImGui::Text("  Troops: %d", troopCount);
-            if (otherCount > 0) ImGui::Text("  Other: %d", otherCount);
+            // Dominant faction drives the header tint.
+            const int   dominant = (p1 >= p2 && p1 >= neutralC) ? 1
+                                 : (p2 >= neutralC)             ? 2 : 0;
+            const ImVec4 col     = factionColor(dominant);
 
-            ImGui::Spacing();
+            ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(col.x * 0.22f, col.y * 0.22f, col.z * 0.22f, 1.0f));
+            ImGui::BeginChild("##unitHdrMulti", ImVec2(0, 50), true);
+            ImGui::SetWindowFontScale(1.3f);
+            ImGui::TextColored(ImVec4(1.0f, 0.92f, 0.5f, 1.0f), "%zu units selected", count);
+            ImGui::SetWindowFontScale(1.0f);
+            // Per-side counts in same colors as the single-unit faction badge.
+            if (p1)       { ImGui::TextColored(factionColor(1), "P1: %d", p1); ImGui::SameLine(0, 12); }
+            if (p2)       { ImGui::TextColored(factionColor(2), "P2: %d", p2); ImGui::SameLine(0, 12); }
+            if (neutralC) { ImGui::TextColored(factionColor(0), "N: %d", neutralC); ImGui::SameLine(0, 12); }
+            ImGui::NewLine();
+            ImGui::EndChild();
+            ImGui::PopStyleColor();
+
+            // Group HP bar — same color scheme as the single-unit case.
             if (hpMaxSum > 0) {
-                ImGui::TextColored(ImVec4(0.7f, 0.9f, 0.7f, 1.0f),
-                    "Total HP: %d / %d", hpSum, hpMaxSum);
-            }
-            if (combatCount > 0) {
-                ImGui::TextColored(ImVec4(0.9f, 0.8f, 0.6f, 1.0f),
-                    "Avg attack: %.1f (%d combat units)",
-                    (float)attackSum / (float)combatCount, combatCount);
-            }
-
-            ImGui::Spacing();
-            if (movingCount > 0) {
-                ImGui::TextColored(ImVec4(0.3f, 0.8f, 1.0f, 1.0f),
-                    "%d moving", movingCount);
-            }
-            else {
-                ImGui::TextColored(ImVec4(0.5f, 0.8f, 0.5f, 1.0f), "All idle");
+                float frac = (float)hpSum / (float)hpMaxSum;
+                ImVec4 barColor = (frac > 0.6f) ? ImVec4(0.2f, 0.8f, 0.2f, 1.0f) :
+                                 (frac > 0.3f) ? ImVec4(1.0f, 0.7f, 0.1f, 1.0f) :
+                                                 ImVec4(0.9f, 0.15f, 0.15f, 1.0f);
+                char hpLabel[40];
+                snprintf(hpLabel, sizeof(hpLabel), "Group HP  %d / %d", hpSum, hpMaxSum);
+                ImGui::PushStyleColor(ImGuiCol_PlotHistogram, barColor);
+                ImGui::ProgressBar(frac, ImVec2(-1.0f, 22.0f), hpLabel);
+                ImGui::PopStyleColor();
             }
 
-            // Stance combo: applies to all selected combat units on change
+            // Combat / movement summary on one line.
             if (combatCount > 0) {
+                ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.25f, 1.0f),
+                    "Avg ATK %.1f", (float)attackSum / (float)combatCount);
+                ImGui::SameLine(0, 18);
+            }
+            ImGui::TextColored(movingCount > 0 ? ImVec4(0.3f, 0.8f, 1.0f, 1.0f)
+                                               : ImVec4(0.5f, 0.85f, 0.55f, 1.0f),
+                movingCount > 0 ? "%d moving" : "All idle", movingCount);
+
+            // Bulk stance — single combo applies to every selected combat unit.
+            if (combatCount > 0) {
+                ImGui::Spacing();
                 static const char* kStanceNames[] = { "Neutral", "Aggressive", "Defensive" };
                 int s = stanceMixed ? -1 : firstStance;
-                ImGui::SetNextItemWidth(140.0f);
                 const char* preview = (s >= 0 && s < 3) ? kStanceNames[s] : "Mixed";
-                if (ImGui::BeginCombo("Stance", preview)) {
+                ImGui::SetNextItemWidth(130.0f);
+                if (ImGui::BeginCombo("##StanceMulti", preview)) {
                     for (int i = 0; i < 3; ++i) {
                         bool selected = (s == i);
                         if (ImGui::Selectable(kStanceNames[i], selected)) {
@@ -824,21 +962,17 @@ namespace gps {
                     }
                     ImGui::EndCombo();
                 }
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.65f, 0.65f, 0.75f, 1.0f), "Stance");
             }
 
-            // Lista scurta de ID-uri
-            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "IDs:");
-            ImGui::SameLine();
+            // Compact ID list (debug, kept short).
             std::string idList;
             int shown = 0;
             for (int id : selectedIDs) {
                 if (!idList.empty()) idList += ", ";
                 idList += std::to_string(id);
-                shown++;
-                if (shown >= 8) {
-                    idList += "...";
-                    break;
-                }
+                if (++shown >= 8) { idList += "..."; break; }
             }
             ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.6f, 1.0f), "%s", idList.c_str());
         }
@@ -1254,7 +1388,7 @@ namespace gps {
             ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings);
 
         ImGui::SetWindowFontScale(2.5f);
-        const char* title = won ? "VICTORY" : "DEFEAT";
+        const char* title = won ? "PLAYER 1 WINS" : "PLAYER 2 WINS";
         ImVec2 ts = ImGui::CalcTextSize(title);
         ImGui::SetCursorPosX((size.x - ts.x) * 0.5f);
         ImGui::TextColored(accent, "%s", title);
@@ -1264,9 +1398,56 @@ namespace gps {
         ImGui::Separator();
         ImGui::Spacing();
 
-        if (ImGui::Button("Continue", ImVec2(-1, 32))) {
+        const int mins = static_cast<int>(m_matchElapsed) / 60;
+        const int secs = static_cast<int>(m_matchElapsed) % 60;
+        ImGui::Text("Duration: %02d:%02d", mins, secs);
+        ImGui::Text("P1 units alive / lost: %d / %d", m_matchP1Alive, m_matchP1Lost);
+        ImGui::Text("P2 units alive / lost: %d / %d", m_matchP2Alive, m_matchP2Lost);
+        ImGui::Text("Oil spent: %.0f", m_matchOilSpent);
+
+        ImGui::Spacing();
+
+        if (ImGui::Button("Reset Match", ImVec2(-1, 36))) {
+            m_resetRequested = true;
             m_victory = false;
             m_defeat  = false;
+            m_gameStarted = false;
+        }
+
+        ImGui::End();
+        ImGui::PopStyleColor();
+    }
+
+    // ===========================
+    // START OVERLAY — pre-match "Press Start" screen
+    // ===========================
+    void GuiManager::RenderStartOverlay() {
+        ImGuiViewport* vp = ImGui::GetMainViewport();
+        ImVec2 size(360, 160);
+        ImGui::SetNextWindowPos(
+            ImVec2(vp->WorkPos.x + (vp->WorkSize.x - size.x) * 0.5f,
+                   vp->WorkPos.y + (vp->WorkSize.y - size.y) * 0.5f),
+            ImGuiCond_Always);
+        ImGui::SetNextWindowSize(size, ImGuiCond_Always);
+
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.06f, 0.06f, 0.10f, 0.98f));
+        ImGui::Begin("##StartOverlay", nullptr,
+            ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoSavedSettings);
+
+        ImGui::SetWindowFontScale(2.0f);
+        const char* title = "READY";
+        ImVec2 ts = ImGui::CalcTextSize(title);
+        ImGui::SetCursorPosX((size.x - ts.x) * 0.5f);
+        ImGui::TextColored(ImVec4(0.9f, 0.85f, 0.4f, 1.0f), "%s", title);
+        ImGui::SetWindowFontScale(1.0f);
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Start Game", ImVec2(-1, 36))) {
+            m_gameStarted = true;
         }
 
         ImGui::End();

@@ -76,6 +76,13 @@ double       lastFPressTime     = -10.0;
 // Oil cost for placing a prop. Mirrored in GuiManager.cpp for the spawn-panel
 // disabled state and cost label.
 constexpr float kPropPlacementOilCost = 10.0f;
+// Delay (seconds) before an aircraft carrier deploys a replacement plane after
+// its current one is shot down.
+constexpr float kAircraftRespawnDelay = 5.0f;
+
+// Forward declaration — definition lives after the global system pointers it
+// uses (g_sceneManager / g_scene).
+static int SpawnCarrierAircraft(gps::SceneObject* carrier);
 
 // ===========================
 // SHADERS
@@ -179,7 +186,7 @@ std::vector<const GLchar*> faces{
 // ===========================
 // Hex tile model has center-to-vertex = 5.587 in model units; tile size must equal
 // modelScale * 5.587 for hexes to pack flush. Smaller tile -> denser-feeling map.
-gps::TileManager g_tileManager(100.566f, glm::vec3(18.0f), -60);
+gps::TileManager g_tileManager(100.566f, glm::vec3(18.0f), -160);
 
 // ===========================
 // NOILE SISTEME (GLOBALE)
@@ -197,6 +204,50 @@ gps::EditorState* g_editorState = nullptr;
 // PROP PLACEMENT MODE (MVP)
 // ===========================
 int g_nextPlacedPropID = 10001;
+
+// Spawn an aircraft orbiting the given carrier, inheriting the carrier's faction.
+// Used both at initial carrier placement and by the per-frame respawn loop.
+// Returns the new plane's ID, or -1 on failure.
+static int SpawnCarrierAircraft(gps::SceneObject* carrier) {
+    if (!carrier || !g_sceneManager) return -1;
+    glm::vec3 carrierPos = carrier->GetTransform().GetPosition();
+    glm::vec3 aircraftPos = carrierPos + glm::vec3(carrier->unitStats.attackRange, 20.0f, 0.0f);
+    gps::SceneObject* plane = g_sceneManager->SpawnObject(
+        "Aircraft_for_" + std::to_string(carrier->GetID()),
+        "aircraft",
+        "aircraft",
+        aircraftPos,
+        glm::vec3(3.0f)
+    );
+    if (!plane) return -1;
+
+    plane->unitStats.faction      = carrier->unitStats.faction;
+    plane->orbitData.isOrbiting   = true;
+    plane->orbitData.parentID     = carrier->GetID();
+    plane->orbitData.orbitRadius  = carrier->unitStats.attackRange;
+    plane->orbitData.orbitSpeed   = 1.0f;
+    plane->orbitData.orbitAngle   = 0.0f;
+    plane->orbitData.orbitHeight  = 20.0f;
+    plane->SetCollisionRadius(0.0f);
+
+    carrier->orbitData.childAircraftID = plane->GetID();
+    carrier->orbitData.respawnAfter    = 0.0;
+    return plane->GetID();
+}
+
+// ===========================
+// MATCH STATE
+// ===========================
+// Bases use sentinel -1 (never spawned) and -2 (was spawned, has died) so we
+// can detect a fall in the same frame the SceneObject gets destroyed.
+int    g_baseP1ID        = -1;
+int    g_baseP2ID        = -1;
+bool   g_matchActive     = false;   // true while combat should tick
+bool   g_matchInitialized= false;   // true once the user has pressed Start
+double g_matchStartTime  = 0.0;
+int    g_matchP1Lost     = 0;
+int    g_matchP2Lost     = 0;
+float  g_matchOilSpent   = 0.0f;
 
 
 // ===========================
@@ -353,6 +404,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
     if (g_sceneManager->m_bombardmentTargeting && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         g_sceneManager->m_bombardmentTargeting = false;
         if (resourceManager.Spend("Oil", 75.0f)) {
+            g_matchOilSpent += 75.0f;
             glm::vec3 target = screenToWorld(mousePos);
             if (g_combatSystem) g_combatSystem->SpawnBombardment(target, 1 /* player faction */);
         }
@@ -412,28 +464,17 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             }
             
             if (spawned) {
+                // Apply the selected faction (Friendly / Enemy) over whatever
+                // InitializeUnitsStats defaulted to based on the unit's tag.
+                spawned->unitStats.faction = g_sceneManager->m_propPlacementFaction;
+
                 resourceManager.Spend("Oil", kPropPlacementOilCost);
+                g_matchOilSpent += kPropPlacementOilCost;
                 std::cout << "Placed " << g_sceneManager->m_propPlacementLabel << " at ("
                     << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
 
                 if (spawned->GetTag() == "aircraftCarrier") {
-                    glm::vec3 aircraftPos = worldPos + glm::vec3(spawned->unitStats.attackRange, 20.0f, 0.0f);
-                    gps::SceneObject* plane = g_sceneManager->SpawnObject(
-                        "Aircraft_for_" + std::to_string(spawned->GetID()),
-                        "aircraft",
-                        "aircraft",
-                        aircraftPos,
-                        glm::vec3(3.0f)
-                    );
-                    if (plane) {
-                        plane->orbitData.isOrbiting = true;
-                        plane->orbitData.parentID = spawned->GetID();
-                        plane->orbitData.orbitRadius = spawned->unitStats.attackRange;
-                        plane->orbitData.orbitSpeed = 1.0f;
-                        plane->orbitData.orbitAngle = 0.0f;
-                        plane->orbitData.orbitHeight = 20.0f;
-                        plane->SetCollisionRadius(0.0f);
-                    }
+                    SpawnCarrierAircraft(spawned);
                 }
             }
         }
@@ -867,6 +908,64 @@ void initSceneManager() {
         << g_scene->GetObjectCount() << " objects" << std::endl;
 }
 
+// Stamps a guaranteed island at each of two opposite playable corners and
+// spawns a giant oil-rig "base" on top. Faction baked into the tag via
+// SceneManager::InitializeUnitsStats ("baseP1" -> faction 1, etc.).
+void spawnBases() {
+    int minX, maxX, minZ, maxZ;
+    g_tileManager.GetPlayableRange(minX, maxX, minZ, maxZ);
+
+    // Inset by 1 so the island ring stays inside the playable area.
+    const int c1x = minX + 1, c1z = minZ + 1;
+    const int c2x = maxX - 1, c2z = maxZ - 1;
+    g_tileManager.StampIslandAt(c1x, c1z);
+    g_tileManager.StampIslandAt(c2x, c2z);
+
+    glm::vec3 p1 = g_tileManager.GridToWorld(c1x, c1z);
+    glm::vec3 p2 = g_tileManager.GridToWorld(c2x, c2z);
+    p1.y = 0.0f; p2.y = 0.0f;
+    const glm::vec3 baseScale(10.0f);
+
+    gps::SceneObject* b1 = g_sceneManager->SpawnObject("Base_P1", "baseP1", "oilRig", p1, baseScale);
+    gps::SceneObject* b2 = g_sceneManager->SpawnObject("Base_P2", "baseP2", "oilRig", p2, baseScale);
+    g_baseP1ID = b1 ? b1->GetID() : -1;
+    g_baseP2ID = b2 ? b2->GetID() : -1;
+}
+
+// Tears down every non-tile object, regenerates the tile map with a fresh
+// random layout, resets match counters, and re-spawns the bases on the new
+// map. The Start overlay reappears via GuiManager's m_gameStarted = false.
+void resetMatch() {
+    if (g_scene) {
+        std::vector<int> toKill;
+        for (const auto& o : g_scene->GetObjects()) {
+            gps::SceneObject* obj = o.get();
+            if (!obj) continue;
+            const std::string& tag = obj->GetTag();
+            if (tag == "tile" || tag == "tileBorder") continue;
+            toKill.push_back(obj->GetID());
+        }
+        for (int id : toKill) g_scene->DestroyObject(id);
+    }
+    if (g_selectionSystem) g_selectionSystem->ClearSelection();
+
+    // Wipe the old map and roll a fresh random layout so every match feels new.
+    g_tileManager.Clear();
+    g_tileManager.GenerateAndLoadGrid(-30, 10, -10, 10);
+
+    g_matchActive      = false;
+    g_matchInitialized = false;
+    g_matchP1Lost      = 0;
+    g_matchP2Lost      = 0;
+    g_matchOilSpent    = 0.0f;
+    g_baseP1ID = g_baseP2ID = -1;
+
+    gps::ResourceManager::Instance().Set("Oil",  50.0f);
+    gps::ResourceManager::Instance().Set("Fish",  0.0f);
+
+    spawnBases();
+}
+
 void initSelectionSystem() {
     g_selectionSystem = new gps::SelectionSystem();
     g_selectionSystem->Initialize(glWindowWidth, glWindowHeight);
@@ -956,30 +1055,45 @@ void renderRangeCircles() {
     }
 
 
-    for (int id : g_selectionSystem->GetSelectedIDs()) {
-        gps::SceneObject* obj = g_scene->GetObjectByID(id);
-        if (!obj || !obj->IsActive()) continue;
-        if (!obj->unitStats.isCombatUnit || obj->unitStats.attackRange <= 0.0f) continue;
-
+    // Helper: draws the attack-range ring for a combat unit at its current pos.
+    // Pulled out so we can also surface the carrier's deployed plane range when
+    // the carrier (not the plane) is what the player has selected.
+    auto drawUnitRange = [&](gps::SceneObject* obj, const glm::vec4& colorOverride, bool useOverride) {
+        if (!obj || !obj->IsActive()) return;
+        if (!obj->unitStats.isCombatUnit || obj->unitStats.attackRange <= 0.0f) return;
         glm::vec3 pos = obj->GetTransform().GetPosition();
-        pos.y += 2.0f; // lift slightly above water to avoid z-fighting
+        pos.y += 2.0f;
         float range = obj->unitStats.attackRange;
-
         glm::mat4 model = glm::scale(
             glm::translate(glm::mat4(1.0f), pos),
-            glm::vec3(range, 1.0f, range)
-        );
+            glm::vec3(range, 1.0f, range));
         glUniformMatrix4fv(circleModelLoc, 1, GL_FALSE, glm::value_ptr(model));
 
         glm::vec4 color;
-        switch (obj->unitStats.faction) {
-            case 1:  color = glm::vec4(0.0f, 1.0f, 0.2f, 0.9f); break; // green  — player
-            case 2:  color = glm::vec4(1.0f, 0.2f, 0.0f, 0.9f); break; // red    — enemy
-            default: color = glm::vec4(1.0f, 1.0f, 1.0f, 0.9f); break; // white  — neutral
+        if (useOverride) {
+            color = colorOverride;
+        } else {
+            switch (obj->unitStats.faction) {
+                case 1:  color = glm::vec4(0.0f, 1.0f, 0.2f, 0.9f); break;
+                case 2:  color = glm::vec4(1.0f, 0.2f, 0.0f, 0.9f); break;
+                default: color = glm::vec4(1.0f, 1.0f, 1.0f, 0.9f); break;
+            }
         }
         glUniform4fv(circleColorLoc, 1, glm::value_ptr(color));
-
         glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+    };
+
+    for (int id : g_selectionSystem->GetSelectedIDs()) {
+        gps::SceneObject* obj = g_scene->GetObjectByID(id);
+        if (!obj) continue;
+        drawUnitRange(obj, glm::vec4(0.0f), false);
+
+        // When a carrier is selected, also surface the deployed plane's range
+        // (dashed-cyan-ish tint) so the player can read the plane's threat zone.
+        if (obj->GetTag() == "aircraftCarrier" && obj->orbitData.childAircraftID >= 0) {
+            gps::SceneObject* plane = g_scene->GetObjectByID(obj->orbitData.childAircraftID);
+            drawUnitRange(plane, glm::vec4(0.4f, 0.85f, 1.0f, 0.9f), true);
+        }
     }
 
     glBindVertexArray(0);
@@ -1434,6 +1548,9 @@ int main(int argc, const char* argv[]) {
     g_editorState = new gps::EditorState();
     g_guiManager->BindEditorState(g_editorState);
 
+    // Bases live across the match lifecycle; spawn once at boot and on Reset.
+    spawnBases();
+
     std::cout << "✅ Initialization complete!" << std::endl;
     std::cout << "\n🎮 CONTROLS:" << std::endl;
     std::cout << "  WASD - Move camera" << std::endl;
@@ -1492,14 +1609,67 @@ int main(int argc, const char* argv[]) {
             }
         }
 
-        // Combat update
-        if (g_combatSystem) {
+        // Match flow: kick off the match the first frame the user clicks Start.
+        if (g_guiManager && g_guiManager->IsGameStarted() && !g_matchInitialized) {
+            g_matchInitialized = true;
+            g_matchActive      = true;
+            g_matchStartTime   = glfwGetTime();
+        }
+
+        // Combat update — frozen until the user starts the match, and frozen
+        // again the moment one of the bases falls so dead units don't
+        // post-mortem-kill the rest of the army.
+        if (g_combatSystem && g_matchActive) {
             g_combatSystem->Update(deltaTime);
             for (int deadID : g_combatSystem->GetDeadIDs()) {
+                // Capture faction + base-fall BEFORE the SceneObject is gone.
+                if (gps::SceneObject* o = g_scene ? g_scene->GetObjectByID(deadID) : nullptr) {
+                    if      (o->unitStats.faction == 1) g_matchP1Lost++;
+                    else if (o->unitStats.faction == 2) g_matchP2Lost++;
+                }
+                if (deadID == g_baseP1ID) g_baseP1ID = -2;
+                if (deadID == g_baseP2ID) g_baseP2ID = -2;
                 if (g_selectionSystem) g_selectionSystem->RemoveFromSelection(deadID);
                 if (g_scene) g_scene->DestroyObject(deadID);
             }
             g_combatSystem->ClearDeadIDs();
+
+            // Win condition: whichever base survives wins.
+            if (g_baseP1ID == -2 || g_baseP2ID == -2) {
+                g_matchActive = false;
+                if (g_guiManager) {
+                    g_guiManager->SetVictory(g_baseP2ID == -2);
+                    g_guiManager->SetDefeat (g_baseP1ID == -2);
+                }
+            }
+        }
+
+        // Carrier deploy/respawn: when a carrier's plane is gone, schedule a
+        // replacement; when the timer expires (and the carrier is still alive),
+        // spawn the new plane via the same helper used at initial placement.
+        {
+            const double now = glfwGetTime();
+            for (const auto& objPtr : g_scene->GetObjects()) {
+                gps::SceneObject* carrier = objPtr.get();
+                if (!carrier->IsActive() || !carrier->unitStats.isAlive) continue;
+                if (carrier->GetTag() != "aircraftCarrier") continue;
+
+                // Has the tracked plane gone missing / died?
+                if (carrier->orbitData.childAircraftID >= 0) {
+                    gps::SceneObject* plane = g_scene->GetObjectByID(carrier->orbitData.childAircraftID);
+                    if (!plane || !plane->IsActive() || !plane->unitStats.isAlive) {
+                        carrier->orbitData.childAircraftID = -1;
+                        carrier->orbitData.respawnAfter    = now + kAircraftRespawnDelay;
+                    }
+                }
+                // Timer expired -> deploy a fresh plane.
+                if (carrier->orbitData.childAircraftID < 0 &&
+                    carrier->orbitData.respawnAfter > 0.0 &&
+                    now >= carrier->orbitData.respawnAfter)
+                {
+                    SpawnCarrierAircraft(carrier);
+                }
+            }
         }
 
         // Orbit update: aircraft circles around parent carrier using circle equation
@@ -1676,10 +1846,28 @@ int main(int argc, const char* argv[]) {
                 toDestroy.push_back(obj->GetID());
             }
             for (int id : killed) {
+                // Projectile kills bypass CombatSystem::GetDeadIDs, so mirror the
+                // same bookkeeping here: faction-lost counter + base-fall sentinel.
+                if (gps::SceneObject* v = g_scene->GetObjectByID(id)) {
+                    if      (v->unitStats.faction == 1) g_matchP1Lost++;
+                    else if (v->unitStats.faction == 2) g_matchP2Lost++;
+                }
+                if (id == g_baseP1ID) g_baseP1ID = -2;
+                if (id == g_baseP2ID) g_baseP2ID = -2;
                 if (g_selectionSystem) g_selectionSystem->RemoveFromSelection(id);
                 g_scene->DestroyObject(id);
             }
             for (int id : toDestroy) g_scene->DestroyObject(id);
+
+            // Win condition: same check as after the CombatSystem update, run
+            // again here because projectile damage is resolved further down.
+            if (g_matchActive && (g_baseP1ID == -2 || g_baseP2ID == -2)) {
+                g_matchActive = false;
+                if (g_guiManager) {
+                    g_guiManager->SetVictory(g_baseP2ID == -2);
+                    g_guiManager->SetDefeat (g_baseP1ID == -2);
+                }
+            }
         }
 
         } // end play-mode-only systems
@@ -1710,6 +1898,26 @@ int main(int argc, const char* argv[]) {
         g_guiManager->SetCameraPosition(myCamera.getCameraPosition());
         g_guiManager->SetZoomFactor(zoomFactor);
         g_guiManager->SetViewProjection(view, projection);
+
+        // Roll up match stats for the end-game overlay.
+        int p1Alive = 0, p2Alive = 0;
+        if (g_scene) {
+            for (const auto& o : g_scene->GetObjects()) {
+                gps::SceneObject* obj = o.get();
+                if (!obj || !obj->IsActive() || !obj->unitStats.isAlive) continue;
+                const std::string& tag = obj->GetTag();
+                if (tag == "tile" || tag == "tileBorder") continue;
+                if      (obj->unitStats.faction == 1) p1Alive++;
+                else if (obj->unitStats.faction == 2) p2Alive++;
+            }
+        }
+        const float elapsed = g_matchInitialized
+            ? static_cast<float>(glfwGetTime() - g_matchStartTime)
+            : 0.0f;
+        g_guiManager->SetMatchStats(elapsed, p1Alive, p2Alive,
+                                    g_matchP1Lost, g_matchP2Lost, g_matchOilSpent);
+
+        if (g_guiManager->ConsumeResetRequest()) resetMatch();
     }
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);

@@ -103,9 +103,17 @@ namespace gps {
         void SetTileType(int gridX, int gridZ, TileType newType);
 
         /**
-         * @brief Atribuie procedural TileType la fiecare tile (doar cele cu type==Sea)
+         * @brief Stamps a guaranteed small island at the given grid cell:
+         * the center becomes Land, the 6 hex neighbours become Shallows.
+         * Used to ensure player bases always sit on dry ground.
          */
-        void AssignProceduralTypes(unsigned seed = 1337u);
+        void StampIslandAt(int gridX, int gridZ);
+
+        /**
+         * @brief Atribuie procedural TileType la fiecare tile (doar cele cu type==Sea)
+         * seed=0 -> non-deterministic (seeded via std::random_device).
+         */
+        void AssignProceduralTypes(unsigned seed = 0u);
 
         /**
          * @brief Add a decorative half-scale tile ring around the playable area
@@ -209,6 +217,8 @@ namespace gps {
 
         // Grid range getters
         void GetGridRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const;
+        // Same as GetGridRange but excludes the decorative border ring.
+        void GetPlayableRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const;
 
         // ===========================
         // CLEANUP
