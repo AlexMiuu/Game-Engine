@@ -63,7 +63,9 @@ namespace gps {
         // Creeaz� componentele scenei
        // CreateTerrain();
        // CreateStaticObjects();
-        CreateRandomObstacles(100);
+        // CreateRandomObstacles disabled — the islandT props it scattered were
+        // visual noise (small floating objects with health bars) and got in the
+        // way of unit placement.
         CreateInitialTroops(5);
         
 
@@ -505,6 +507,21 @@ namespace gps {
             stats.faction = 2;
             stats.attackMode = AttackMode::Projectile;
             stats.baseAttackCooldown = 0.05f; // CIWS-like ~20 rounds/sec
+        }
+        else if (tag == "mine")
+        {
+            // Stationary contact mine: low HP (easy to snipe with ranged units),
+            // no attack stat — damage is applied by the per-frame mine loop in
+            // main.cpp when an enemy movable unit enters detonation range.
+            stats.health       = 50;
+            stats.maxHealth    = 50;
+            stats.attack       = 0;
+            stats.attackRange  = 0.0f;
+            stats.isCombatUnit = false;
+            stats.isAlive      = true;
+            stats.isMovable    = false;
+            // faction is overridden by m_propPlacementFaction in main.cpp's
+            // placement handler, same as every other placeable.
         }
         else if (tag == "baseP1" || tag == "baseP2")
         {

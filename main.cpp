@@ -79,6 +79,9 @@ constexpr float kPropPlacementOilCost = 10.0f;
 // Delay (seconds) before an aircraft carrier deploys a replacement plane after
 // its current one is shot down.
 constexpr float kAircraftRespawnDelay = 5.0f;
+// Seconds of "no combat tick" at match start so the pre-staged MVG enemy
+// doesn't instantly open fire while the player is still getting their bearings.
+constexpr double kMatchGraceSec = 5.0;
 
 // Forward declaration — definition lives after the global system pointers it
 // uses (g_sceneManager / g_scene).
@@ -205,6 +208,27 @@ gps::EditorState* g_editorState = nullptr;
 // ===========================
 int g_nextPlacedPropID = 10001;
 
+// Apply a single damage hit to victim. Adds to killedOut on lethal hit and
+// auto-assigns retaliation target (so Defensive units fight back). Shared by
+// the projectile-impact path and the naval-mine detonation path.
+static void ApplyDamageTo(gps::SceneObject* victim, int dmg, int attackerOwnerID,
+                          std::vector<int>& killedOut) {
+    if (!victim || !victim->IsActive() || !victim->unitStats.isAlive) return;
+    victim->unitStats.health -= dmg;
+    if (victim->unitStats.health <= 0) {
+        victim->unitStats.health  = 0;
+        victim->unitStats.isAlive = false;
+        victim->SetActive(false);
+        killedOut.push_back(victim->GetID());
+    } else if (victim->unitStats.targetID == -1) {
+        victim->unitStats.targetID = attackerOwnerID;
+    }
+}
+
+// Forward declaration — body lives below MATCH STATE because it touches
+// g_baseP1ID / g_baseP2ID / g_matchP1Lost / g_matchP2Lost.
+static void CleanupKilled(const std::vector<int>& killed);
+
 // Spawn an aircraft orbiting the given carrier, inheriting the carrier's faction.
 // Used both at initial carrier placement and by the per-frame respawn loop.
 // Returns the new plane's ID, or -1 on failure.
@@ -248,6 +272,23 @@ double g_matchStartTime  = 0.0;
 int    g_matchP1Lost     = 0;
 int    g_matchP2Lost     = 0;
 float  g_matchOilSpent   = 0.0f;
+
+// Bookkeep + destroy a batch of just-killed units: faction-lost counters,
+// base-fall sentinels, selection cleanup, scene destroy. Same flow used by
+// both projectile-splash and mine-splash paths. (Declared above; body here
+// because it depends on the MATCH STATE globals.)
+static void CleanupKilled(const std::vector<int>& killed) {
+    for (int id : killed) {
+        if (gps::SceneObject* v = g_scene->GetObjectByID(id)) {
+            if      (v->unitStats.faction == 1) g_matchP1Lost++;
+            else if (v->unitStats.faction == 2) g_matchP2Lost++;
+        }
+        if (id == g_baseP1ID) g_baseP1ID = -2;
+        if (id == g_baseP2ID) g_baseP2ID = -2;
+        if (g_selectionSystem) g_selectionSystem->RemoveFromSelection(id);
+        g_scene->DestroyObject(id);
+    }
+}
 
 
 // ===========================
@@ -396,6 +437,89 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
     // ========== PLAY MODE INPUT (existing code) ==========
 
+    // Patrol targeting: left-click marks point A, then point B. After B is set,
+    // every snapshotted unit is armed with the matching MovementData and the
+    // arrival hook re-arms each leg until cancelled.
+    if (g_sceneManager->m_patrolTargeting && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+        glm::vec3 clicked = screenToWorld(mousePos);
+
+        // Clamp to the playable grid AABB so we can't drop a waypoint into the void.
+        glm::vec3 gridMin, gridMax;
+        if (g_tileManager.GetPlayableBounds(gridMin, gridMax)) {
+            clicked.x = glm::clamp(clicked.x, gridMin.x, gridMax.x);
+            clicked.z = glm::clamp(clicked.z, gridMin.z, gridMax.z);
+        }
+
+        // Reject Land / border / void — ships can't reach them and the arrival
+        // hook would silently halt the patrol there. Same rule as the movement
+        // path in the main loop.
+        int gx, gz;
+        g_tileManager.WorldToGrid(clicked, gx, gz);
+        gps::Tile* t = g_tileManager.GetTile(gx, gz);
+        if (!t || t->isBorder || t->type == gps::TileType::Land) {
+            std::cout << "Patrol waypoint rejected (not navigable)" << std::endl;
+            return;
+        }
+
+        if (g_sceneManager->m_patrolClickPhase == 0) {
+            g_sceneManager->m_patrolPointA   = clicked;
+            g_sceneManager->m_patrolClickPhase = 1;
+        } else {
+            const glm::vec3 A = g_sceneManager->m_patrolPointA;
+            const glm::vec3 B = clicked;
+
+            // Centroid of the snapshotted movable units, so the patrol formation
+            // preserves the shape the group has right now.
+            glm::vec3 centroid(0.0f);
+            int n = 0;
+            for (int id : g_sceneManager->m_patrolUnitIDs) {
+                gps::SceneObject* obj = g_scene->GetObjectByID(id);
+                if (!obj || !obj->unitStats.isMovable) continue;
+                centroid += obj->GetTransform().GetPosition();
+                ++n;
+            }
+            if (n > 0) centroid /= static_cast<float>(n);
+
+            for (int id : g_sceneManager->m_patrolUnitIDs) {
+                gps::SceneObject* obj = g_scene->GetObjectByID(id);
+                if (!obj || !obj->unitStats.isMovable) continue;
+
+                glm::vec3 offset = obj->GetTransform().GetPosition() - centroid;
+                offset.y = 0.0f;
+
+                obj->patrolData.isPatrolling       = true;
+                obj->patrolData.pointA             = A;
+                obj->patrolData.pointB             = B;
+                obj->patrolData.offsetFromCentroid = offset;
+                obj->patrolData.headingToB         = true;
+
+                glm::vec3 target = B + offset;
+                if (g_tileManager.GetPlayableBounds(gridMin, gridMax)) {
+                    target.x = glm::clamp(target.x, gridMin.x, gridMax.x);
+                    target.z = glm::clamp(target.z, gridMin.z, gridMax.z);
+                }
+                glm::vec3 dir = target - obj->GetTransform().GetPosition();
+                dir.y = 0.0f;
+                if (glm::length(dir) > 0.0001f) obj->movement.moveDirection = glm::normalize(dir);
+
+                obj->movement.isMoving      = true;
+                obj->movement.moveStartPos  = obj->GetTransform().GetPosition();
+                obj->movement.moveEndPos    = target;
+                obj->movement.moveStartTime = glfwGetTime();
+                obj->movement.moveDuration  = 2.0f;
+                int dgx, dgz;
+                g_tileManager.WorldToGrid(target, dgx, dgz);
+                if (gps::Tile* dt = g_tileManager.GetTile(dgx, dgz))
+                    obj->movement.moveDuration *= gps::GetTileEffect(dt->type).moveDurationMul;
+            }
+            // Exit targeting mode.
+            g_sceneManager->m_patrolTargeting  = false;
+            g_sceneManager->m_patrolClickPhase = 0;
+            g_sceneManager->m_patrolUnitIDs.clear();
+        }
+        return;
+    }
+
     // Bombardment ability: left-click finalizes the strike, deducts Oil, and lets
     // CombatSystem drop one big AOE projectile from the sky on the clicked point.
     if (g_sceneManager->m_bombardmentTargeting){
@@ -454,6 +578,14 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
                         g_scene->DestroyObject(spawned->GetID());
                         spawned = nullptr;
                          return;
+                }
+                // Mines must sit on water (Sea / Shallows / Oil / Fish) — they
+                // can't be placed on Land since the ships they're meant to
+                // catch never go there.
+                if (spawned->GetTag() == "mine" && t->type == gps::TileType::Land) {
+                    g_scene->DestroyObject(spawned->GetID());
+                    spawned = nullptr;
+                    return;
                 }
             } else {
                 // Click landed outside any tile (shouldn't happen after clamp,
@@ -592,6 +724,9 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             if (gps::Tile* destTile = g_tileManager.GetTile(dgx, dgz)) {
                 obj->movement.moveDuration *= gps::GetTileEffect(destTile->type).moveDurationMul;
             }
+
+            // Manual move order always cancels an active patrol on this unit.
+            obj->patrolData.isPatrolling = false;
         }
     }
 }
@@ -932,6 +1067,77 @@ void spawnBases() {
     g_baseP2ID = b2 ? b2->GetID() : -1;
 }
 
+// MVG seed: at match start the enemy (faction 2) corner already has economy,
+// defense, and an active fleet so the demo shows a real fight from frame 1.
+// Combat is gated by kMatchGraceSec so the player gets a moment to react.
+static gps::SceneObject* SpawnEnemyUnit(const std::string& name, const std::string& tag,
+                                       const std::string& model, const glm::vec3& pos, float scale) {
+    gps::SceneObject* obj = g_sceneManager->SpawnObject(name, tag, model, pos, glm::vec3(scale));
+    if (obj) obj->unitStats.faction = 2;
+    return obj;
+}
+
+void SpawnEnemyStartingForce() {
+    if (!g_sceneManager || !g_scene) return;
+
+    int minX, maxX, minZ, maxZ;
+    g_tileManager.GetPlayableRange(minX, maxX, minZ, maxZ);
+    const int cx = maxX - 1, cz = maxZ - 1;          // P2 corner (matches spawnBases)
+
+    // Match the ground plane used by mouse placement (screenToWorld returns y=-60),
+    // so enemy units sit on the same surface as user-placed ones.
+    const float kGroundY = -60.0f;
+    auto tileAt = [&](int gx, int gz) {
+        glm::vec3 p = g_tileManager.GridToWorld(gx, gz);
+        p.y = kGroundY;
+        return p;
+    };
+
+    // Pin every spawn cell to the tile type that unit actually needs, so the
+    // procedural generator's random output can't strand a ship on Land or
+    // float a turret over open water.
+    auto force = [&](int gx, int gz, gps::TileType t) {
+        if (gps::Tile* tile = g_tileManager.GetTile(gx, gz))
+            if (!tile->isBorder && tile->type != t)
+                g_tileManager.SetTileType(gx, gz, t);
+    };
+
+    // Stamp two extra land tiles a few hexes inland from the base so the
+    // turrets have a Land tile to sit on, plus force the turret cells to Land
+    // explicitly (StampIslandAt rings them with Shallows but we want a clean
+    // platform under each turret).
+    g_tileManager.StampIslandAt(cx - 2, cz);
+    g_tileManager.StampIslandAt(cx, cz - 2);
+    force(cx - 2, cz, gps::TileType::Land);
+    force(cx, cz - 2, gps::TileType::Land);
+
+    // Oil rigs sit in shallow water adjacent to the base island.
+    force(cx + 1, cz, gps::TileType::Shallows);
+    force(cx, cz + 1, gps::TileType::Shallows);
+    SpawnEnemyUnit("Enemy_OilRig_1", "oilRig", "oilRig", tileAt(cx + 1, cz), 2.5f);
+    SpawnEnemyUnit("Enemy_OilRig_2", "oilRig", "oilRig", tileAt(cx, cz + 1), 2.5f);
+
+    // Defense — CIWS on the freshly-stamped Land tiles.
+    SpawnEnemyUnit("Enemy_Turret_1", "turret", "turret", tileAt(cx - 2, cz), 10.5f);
+    SpawnEnemyUnit("Enemy_Turret_2", "turret", "turret", tileAt(cx, cz - 2), 10.5f);
+
+    // Army — ships + frigate + carrier in open water. Force each cell to Sea
+    // so the procedural Land/Shallows assignment doesn't ground them.
+    const std::pair<int,int> navalCells[] = {
+        {cx - 3, cz - 1}, {cx - 1, cz - 3}, {cx - 3, cz - 3}, {cx - 4, cz - 4}
+    };
+    for (const auto& [gx, gz] : navalCells) force(gx, gz, gps::TileType::Sea);
+
+    SpawnEnemyUnit("Enemy_Ship_1", "ship",    "ship",    tileAt(cx - 3, cz - 1), 4.5f);
+    SpawnEnemyUnit("Enemy_Ship_2", "ship",    "ship",    tileAt(cx - 1, cz - 3), 4.5f);
+    SpawnEnemyUnit("Enemy_Frigate","frigate", "frigate", tileAt(cx - 3, cz - 3), 4.5f);
+    gps::SceneObject* carrier = SpawnEnemyUnit("Enemy_Carrier", "aircraftCarrier",
+                                               "aircraftCarrier",
+                                               tileAt(cx - 4, cz - 4),
+                                               4.5f);
+    if (carrier) SpawnCarrierAircraft(carrier);
+}
+
 // Tears down every non-tile object, regenerates the tile map with a fresh
 // random layout, resets match counters, and re-spawns the bases on the new
 // map. The Start overlay reappears via GuiManager's m_gameStarted = false.
@@ -964,6 +1170,7 @@ void resetMatch() {
     gps::ResourceManager::Instance().Set("Fish",  0.0f);
 
     spawnBases();
+    SpawnEnemyStartingForce();
 }
 
 void initSelectionSystem() {
@@ -1327,6 +1534,26 @@ void processMovement() {
     // Quick cancel for placement mode without exiting app
     if (input.IsKeyJustPressed(GLFW_KEY_X)) {
         g_sceneManager->CancelPropPlacement();
+        // Also cancel patrol-targeting and any active patrols on current selection.
+        g_sceneManager->m_patrolTargeting  = false;
+        g_sceneManager->m_patrolClickPhase = 0;
+        g_sceneManager->m_patrolUnitIDs.clear();
+        if (g_selectionSystem && g_scene) {
+            for (int id : g_selectionSystem->GetSelectedIDs())
+                if (gps::SceneObject* o = g_scene->GetObjectByID(id))
+                    o->patrolData.isPatrolling = false;
+        }
+    }
+
+    // Patrol hotkey: same entry point as the GUI button.
+    if (input.IsKeyJustPressed(GLFW_KEY_Q)) {
+        if (g_selectionSystem && g_selectionSystem->HasSelection()) {
+            g_sceneManager->m_patrolUnitIDs.clear();
+            for (int id : g_selectionSystem->GetSelectedIDs())
+                g_sceneManager->m_patrolUnitIDs.push_back(id);
+            g_sceneManager->m_patrolTargeting  = true;
+            g_sceneManager->m_patrolClickPhase = 0;
+        }
     }
 
     if (input.IsKeyJustPressed(GLFW_KEY_F5)) {
@@ -1548,8 +1775,10 @@ int main(int argc, const char* argv[]) {
     g_editorState = new gps::EditorState();
     g_guiManager->BindEditorState(g_editorState);
 
-    // Bases live across the match lifecycle; spawn once at boot and on Reset.
+    // Bases + MVG enemy seed live across the match lifecycle; spawn once at
+    // boot and on Reset.
     spawnBases();
+    SpawnEnemyStartingForce();
 
     std::cout << "✅ Initialization complete!" << std::endl;
     std::cout << "\n🎮 CONTROLS:" << std::endl;
@@ -1616,10 +1845,12 @@ int main(int argc, const char* argv[]) {
             g_matchStartTime   = glfwGetTime();
         }
 
-        // Combat update — frozen until the user starts the match, and frozen
-        // again the moment one of the bases falls so dead units don't
-        // post-mortem-kill the rest of the army.
-        if (g_combatSystem && g_matchActive) {
+        // Combat update — frozen until the user starts the match, frozen
+        // during the post-start grace window, and frozen again the moment one
+        // of the bases falls so dead units don't post-mortem-kill the army.
+        const bool inGrace = g_matchActive
+                            && (glfwGetTime() - g_matchStartTime) < kMatchGraceSec;
+        if (g_combatSystem && g_matchActive && !inGrace) {
             g_combatSystem->Update(deltaTime);
             for (int deadID : g_combatSystem->GetDeadIDs()) {
                 // Capture faction + base-fall BEFORE the SceneObject is gone.
@@ -1800,6 +2031,104 @@ int main(int argc, const char* argv[]) {
             }
         }
 
+        // Patrol re-arm: any unit that just halted while still patrolling flips
+        // its leg direction and arms a fresh move toward the other endpoint.
+        // Runs after the movement loop so collision halts also trigger a retry.
+        for (const auto& objPtr : g_scene->GetObjects()) {
+            gps::SceneObject* obj = objPtr.get();
+            if (!obj->IsActive() || !obj->unitStats.isAlive) continue;
+            if (!obj->patrolData.isPatrolling || obj->movement.isMoving) continue;
+
+            obj->patrolData.headingToB = !obj->patrolData.headingToB;
+            glm::vec3 target = (obj->patrolData.headingToB
+                                  ? obj->patrolData.pointB
+                                  : obj->patrolData.pointA)
+                               + obj->patrolData.offsetFromCentroid;
+            if (hasGridBounds) {
+                target.x = glm::clamp(target.x, gridBoundsMin.x, gridBoundsMax.x);
+                target.z = glm::clamp(target.z, gridBoundsMin.z, gridBoundsMax.z);
+            }
+            glm::vec3 startPos = obj->GetTransform().GetPosition();
+            glm::vec3 dir = target - startPos;
+            dir.y = 0.0f;
+            if (glm::length(dir) > 0.0001f) obj->movement.moveDirection = glm::normalize(dir);
+
+            obj->movement.isMoving      = true;
+            obj->movement.moveStartPos  = startPos;
+            obj->movement.moveEndPos    = target;
+            obj->movement.moveStartTime = static_cast<float>(currentTime);
+            obj->movement.moveDuration  = 2.0f;
+            int dgx, dgz;
+            g_tileManager.WorldToGrid(target, dgx, dgz);
+            if (gps::Tile* dt = g_tileManager.GetTile(dgx, dgz))
+                obj->movement.moveDuration *= gps::GetTileEffect(dt->type).moveDurationMul;
+        }
+
+        // Naval mine detonation: any movable non-friendly unit within trigger
+        // range arms the mine, which then applies splash damage in a wider
+        // radius and self-destructs. Other mines are skipped from both the
+        // trigger and the splash so a single hit can't chain through a field.
+        {
+            constexpr float kMineDetonateRadius = 25.0f;
+            constexpr float kMineSplashRadius   = 35.0f;
+            constexpr int   kMineDamage         = 80;
+
+            std::vector<int> minesToDestroy;
+            std::vector<int> mineKilled;
+            for (const auto& objPtr : g_scene->GetObjects()) {
+                gps::SceneObject* mine = objPtr.get();
+                if (!mine->IsActive() || !mine->unitStats.isAlive) continue;
+                if (mine->GetTag() != "mine") continue;
+
+                const glm::vec3 minePos    = mine->GetWorldCenter();
+                const int       mineFaction = mine->unitStats.faction;
+
+                bool triggered = false;
+                for (const auto& vPtr : g_scene->GetObjects()) {
+                    gps::SceneObject* candidate = vPtr.get();
+                    if (!candidate->IsActive() || !candidate->unitStats.isAlive) continue;
+                    if (!candidate->unitStats.isMovable) continue;
+                    if (candidate->projectileData.isProjectile) continue;
+                    if (candidate->GetTag() == "mine") continue;
+                    if (candidate->GetID() == mine->GetID()) continue;
+                    if (mineFaction != 0 && candidate->unitStats.faction == mineFaction) continue;
+                    if (glm::distance(candidate->GetWorldCenter(), minePos) <= kMineDetonateRadius) {
+                        triggered = true;
+                        break;
+                    }
+                }
+                if (!triggered) continue;
+
+                // Splash: same skip rules as the trigger scan; reuses the shared
+                // damage helper so kills feed the standard cleanup pipeline.
+                for (const auto& vPtr : g_scene->GetObjects()) {
+                    gps::SceneObject* victim = vPtr.get();
+                    if (!victim->IsActive()) continue;
+                    if (victim->projectileData.isProjectile) continue;
+                    if (victim->GetTag() == "mine") continue;
+                    if (victim->GetID() == mine->GetID()) continue;
+                    if (mineFaction != 0 && victim->unitStats.faction == mineFaction) continue;
+                    if (glm::distance(victim->GetWorldCenter(), minePos) > kMineSplashRadius) continue;
+                    ApplyDamageTo(victim, kMineDamage, mine->GetID(), mineKilled);
+                }
+                minesToDestroy.push_back(mine->GetID());
+            }
+            CleanupKilled(mineKilled);
+            for (int id : minesToDestroy) {
+                if (g_selectionSystem) g_selectionSystem->RemoveFromSelection(id);
+                g_scene->DestroyObject(id);
+            }
+
+            // Mine kills can also drop a base (rare, but possible).
+            if (g_matchActive && (g_baseP1ID == -2 || g_baseP2ID == -2)) {
+                g_matchActive = false;
+                if (g_guiManager) {
+                    g_guiManager->SetVictory(g_baseP2ID == -2);
+                    g_guiManager->SetDefeat (g_baseP1ID == -2);
+                }
+            }
+        }
+
         // Projectile arrival: apply damage and destroy stopped projectiles
         {
             std::vector<int> toDestroy;
@@ -1808,21 +2137,7 @@ int main(int argc, const char* argv[]) {
                 gps::SceneObject* obj = objPtr.get();
                 if (!obj->IsActive() || !obj->projectileData.isProjectile || obj->movement.isMoving) continue;
 
-                auto applyDamage = [&](gps::SceneObject* victim, int dmg) {
-                    if (!victim || !victim->IsActive() || !victim->unitStats.isAlive) return;
-                    victim->unitStats.health -= dmg;
-                    if (victim->unitStats.health <= 0) {
-                        victim->unitStats.health = 0;
-                        victim->unitStats.isAlive = false;
-                        victim->SetActive(false);
-                        killed.push_back(victim->GetID());
-                    } else if (victim->unitStats.targetID == -1) {
-                        // Retaliation: assign projectile owner so Defensive units fight back
-                        victim->unitStats.targetID = obj->projectileData.ownerID;
-                    }
-                };
-
-                const int dmg = (int)obj->projectileData.damage;
+                const int   dmg    = (int)obj->projectileData.damage;
                 const float splash = obj->projectileData.splashRadius;
                 if (splash > 0.0f) {
                     // AOE: damage everything in radius around the impact point,
@@ -1838,25 +2153,15 @@ int main(int argc, const char* argv[]) {
                         const int vf = victim->unitStats.faction;
                         if (ownerFaction != 0 && vf != 0 && vf == ownerFaction) continue;
                         if (glm::distance(victim->GetWorldCenter(), impact) > splash) continue;
-                        applyDamage(victim, dmg);
+                        ApplyDamageTo(victim, dmg, obj->projectileData.ownerID, killed);
                     }
                 } else {
-                    applyDamage(g_scene->GetObjectByID(obj->projectileData.targetID), dmg);
+                    ApplyDamageTo(g_scene->GetObjectByID(obj->projectileData.targetID),
+                                  dmg, obj->projectileData.ownerID, killed);
                 }
                 toDestroy.push_back(obj->GetID());
             }
-            for (int id : killed) {
-                // Projectile kills bypass CombatSystem::GetDeadIDs, so mirror the
-                // same bookkeeping here: faction-lost counter + base-fall sentinel.
-                if (gps::SceneObject* v = g_scene->GetObjectByID(id)) {
-                    if      (v->unitStats.faction == 1) g_matchP1Lost++;
-                    else if (v->unitStats.faction == 2) g_matchP2Lost++;
-                }
-                if (id == g_baseP1ID) g_baseP1ID = -2;
-                if (id == g_baseP2ID) g_baseP2ID = -2;
-                if (g_selectionSystem) g_selectionSystem->RemoveFromSelection(id);
-                g_scene->DestroyObject(id);
-            }
+            CleanupKilled(killed);
             for (int id : toDestroy) g_scene->DestroyObject(id);
 
             // Win condition: same check as after the CombatSystem update, run
@@ -1916,6 +2221,12 @@ int main(int argc, const char* argv[]) {
             : 0.0f;
         g_guiManager->SetMatchStats(elapsed, p1Alive, p2Alive,
                                     g_matchP1Lost, g_matchP2Lost, g_matchOilSpent);
+
+        // Surface the grace-period countdown for the centered overlay.
+        const float graceLeft = g_matchActive
+            ? static_cast<float>(kMatchGraceSec - (glfwGetTime() - g_matchStartTime))
+            : 0.0f;
+        g_guiManager->SetGraceSecRemaining(graceLeft > 0.0f ? graceLeft : 0.0f);
 
         if (g_guiManager->ConsumeResetRequest()) resetMatch();
     }

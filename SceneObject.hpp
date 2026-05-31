@@ -80,6 +80,19 @@ namespace gps {
         glm::vec3 tint = glm::vec3(1.0f); // multiplied into fragment color; white = no tint
     };
 
+    // Patrol behavior: bounce between two world-space points until cancelled.
+    // The unit's MovementData is what actually animates the motion each leg;
+    // PatrolData just remembers the endpoints so the arrival hook can re-arm.
+    struct PatrolData {
+        bool      isPatrolling       = false;
+        glm::vec3 pointA             = glm::vec3(0.0f);
+        glm::vec3 pointB             = glm::vec3(0.0f);
+        // Per-unit offset from the group centroid at activation time. Locked
+        // here so formations keep their shape even if collisions nudge units.
+        glm::vec3 offsetFromCentroid = glm::vec3(0.0f);
+        bool      headingToB         = true; // direction of the current leg
+    };
+
     struct OrbitData {
         bool isOrbiting = false;
         int parentID = -1;
@@ -173,6 +186,8 @@ namespace gps {
         ProjectileData projectileData;
 
         OrbitData orbitData;
+
+        PatrolData patrolData;
 
     private:
         int m_id;

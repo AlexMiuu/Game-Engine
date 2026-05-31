@@ -223,6 +223,13 @@ namespace gps {
 
         bool m_bombardmentTargeting = false;
 
+        // Patrol targeting: GUI/hotkey enters this mode with a snapshot of the
+        // current selection; the next two left-clicks define points A and B.
+        bool             m_patrolTargeting = false;
+        int              m_patrolClickPhase = 0; // 0 = waiting for A, 1 = waiting for B
+        glm::vec3        m_patrolPointA = glm::vec3(0.0f);
+        std::vector<int> m_patrolUnitIDs;
+
     private:
         // Scene reference
         Scene* m_scene;

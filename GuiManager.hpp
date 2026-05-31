@@ -102,6 +102,10 @@ namespace gps {
         void SetVictory(bool v) { m_victory = v; }
         void SetDefeat(bool v)  { m_defeat = v; }
 
+        // Seconds of pre-combat grace remaining at match start. <= 0 means
+        // grace is over (overlay hidden). Driven each frame from main.
+        void SetGraceSecRemaining(float s) { m_graceSecRemaining = s; }
+
         // Match flow: pre-game start screen + post-game stats + reset handshake.
         bool IsGameStarted() const { return m_gameStarted; }
         void SetGameStarted(bool v) { m_gameStarted = v; }
@@ -188,6 +192,10 @@ namespace gps {
         // Minimap click teleport — set in RenderMinimap, drained by main loop
         bool      m_minimapClickPending;
         glm::vec3 m_minimapClickWorldPoint;
+
+        // Pre-combat grace window countdown ("Battle starts in 3..."). Driven
+        // from main each frame; <=0 hides the overlay.
+        float     m_graceSecRemaining = 0.0f;
     };
 
 } // namespace gps
