@@ -34,6 +34,19 @@ namespace gps {
             return true;
         }
 
+        bool Spend(const std::string &type[], const float amounts[], int count) {
+            // Check if all resources are sufficient
+            for (int i = 0; i < count; ++i) {
+                auto it = m_pools.find(type[i]);
+                if (it == m_pools.end() || it->second < amounts[i]) return false;
+            }
+            // Deduct all resources
+            for (int i = 0; i < count; ++i) {
+                m_pools[type[i]] -= amounts[i];
+            }
+            return true;
+        }
+
         // Get current amount (0 if unknown type)
         float Get(const std::string& type) const {
             auto it = m_pools.find(type);

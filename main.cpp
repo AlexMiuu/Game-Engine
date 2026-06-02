@@ -83,6 +83,13 @@ constexpr float kAircraftRespawnDelay = 5.0f;
 // doesn't instantly open fire while the player is still getting their bearings.
 constexpr double kMatchGraceSec = 5.0;
 
+// Single source of truth for the world Y every gameplay unit/prop/base sits on.
+// This is the same ground plane screenToWorld() intersects for mouse placement,
+// so anything spawned through it (bases, the pre-staged enemy force, troops,
+// formations) lands coplanar with mouse-placed props instead of floating or
+// sinking at mismatched heights (was 0 / -44 / -60).
+constexpr float kGroundY = -60.0f;
+
 // Forward declaration — definition lives after the global system pointers it
 // uses (g_sceneManager / g_scene).
 static int SpawnCarrierAircraft(gps::SceneObject* carrier);
@@ -189,7 +196,8 @@ std::vector<const GLchar*> faces{
 // ===========================
 // Hex tile model has center-to-vertex = 5.587 in model units; tile size must equal
 // modelScale * 5.587 for hexes to pack flush. Smaller tile -> denser-feeling map.
-gps::TileManager g_tileManager(100.566f, glm::vec3(18.0f), -160);
+static int mapGroundY= -140;
+gps::TileManager g_tileManager(100.566f, glm::vec3(18.0f), mapGroundY);
 
 // ===========================
 // NOILE SISTEME (GLOBALE)
@@ -208,6 +216,40 @@ gps::EditorState* g_editorState = nullptr;
 // ===========================
 int g_nextPlacedPropID = 10001;
 
+// ===========================
+// SPARK PARTICLES (damage feedback)
+// ===========================
+struct Spark {
+    glm::vec3 pos;
+    glm::vec3 vel;
+    float     age   = 0.0f;
+    float     life  = 0.5f;
+    glm::vec4 color = glm::vec4(1.0f, 0.55f, 0.15f, 1.0f);
+};
+std::vector<Spark> g_sparks;
+
+// Emit a burst of sparks at `origin`. Re-used by projectile impact, mine
+// detonation, and any future hit feedback that needs visual punch.
+static void EmitSparks(const glm::vec3& origin, int count, const glm::vec4& color,
+                       float speed = 28.0f, float life = 0.5f) {
+    g_sparks.reserve(g_sparks.size() + count);
+    for (int i = 0; i < count; ++i) {
+        const float u = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        const float v = static_cast<float>(rand()) / static_cast<float>(RAND_MAX);
+        const float theta = u * 6.28318530718f;          // around the vertical axis
+        const float phi   = v * 0.9f + 0.1f;             // mostly upward hemisphere
+        glm::vec3 dir(std::cos(theta) * std::sin(phi),
+                      std::cos(phi),
+                      std::sin(theta) * std::sin(phi));
+        Spark s;
+        s.pos   = origin;
+        s.vel   = dir * (speed * (0.6f + 0.4f * v));
+        s.life  = life * (0.8f + 0.4f * u);
+        s.color = color;
+        g_sparks.push_back(s);
+    }
+}
+
 // Apply a single damage hit to victim. Adds to killedOut on lethal hit and
 // auto-assigns retaliation target (so Defensive units fight back). Shared by
 // the projectile-impact path and the naval-mine detonation path.
@@ -215,7 +257,10 @@ static void ApplyDamageTo(gps::SceneObject* victim, int dmg, int attackerOwnerID
                           std::vector<int>& killedOut) {
     if (!victim || !victim->IsActive() || !victim->unitStats.isAlive) return;
     victim->unitStats.health -= dmg;
-    if (victim->unitStats.health <= 0) {
+    const bool lethal = (victim->unitStats.health <= 0);
+    // Surface the hit as a floating damage number above the victim.
+    if (g_guiManager) g_guiManager->PushFloatingNumber(victim->GetWorldCenter(), dmg, lethal);
+    if (lethal) {
         victim->unitStats.health  = 0;
         victim->unitStats.isAlive = false;
         victim->SetActive(false);
@@ -333,6 +378,7 @@ void renderShadowMap();
 void renderSkyBox();
 void initRangeCircle();
 void renderRangeCircles();
+void renderSparks();
 void renderDebugBounds();
 
 glm::vec3 screenToWorld(const glm::vec2& screenPos);
@@ -366,6 +412,33 @@ void windowResizeCallback(GLFWwindow* window, int width, int height) {
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mode) {
     // Forward către InputManager
     gps::InputManager::Instance().OnKeyEvent(key, scancode, action, mode);
+
+    // Control groups (RTS-style Ctrl+N save / N recall / Shift+N append).
+    // Handled BEFORE the WantsKeyboardInput gate because ImGui's nav-keyboard
+    // flag keeps WantCaptureKeyboard sticky after any panel click — gating
+    // those keys on the full keyboard capture would permanently block them.
+    // We only suppress on WantsTextInput (actual text-field focus).
+    const bool textInputActive = g_guiManager && g_guiManager->WantsTextInput();
+    if (!textInputActive
+        && action == GLFW_PRESS
+        && key >= GLFW_KEY_0 && key <= GLFW_KEY_9
+        && g_selectionSystem
+        && (!g_editorState || g_editorState->IsPlayMode()))
+    {
+        const int  slot  = key - GLFW_KEY_0;
+        const bool ctrl  = (mode & GLFW_MOD_CONTROL) != 0;
+        const bool shift = (mode & GLFW_MOD_SHIFT)   != 0;
+        if (ctrl) {
+            g_selectionSystem->SaveGroup(slot);
+            std::cout << "[ControlGroup] Saved slot " << slot
+                      << " (" << g_selectionSystem->GetGroupSize(slot) << " units)" << std::endl;
+        } else {
+            g_selectionSystem->RecallGroup(slot, /*append=*/shift);
+            std::cout << "[ControlGroup] Recalled slot " << slot
+                      << (shift ? " (append)" : "") << std::endl;
+        }
+        return;
+    }
 
     if (g_guiManager && g_guiManager->WantsKeyboardInput()) {
         return;
@@ -1058,7 +1131,7 @@ void spawnBases() {
 
     glm::vec3 p1 = g_tileManager.GridToWorld(c1x, c1z);
     glm::vec3 p2 = g_tileManager.GridToWorld(c2x, c2z);
-    p1.y = 0.0f; p2.y = 0.0f;
+    p1.y = kGroundY; p2.y = kGroundY;
     const glm::vec3 baseScale(10.0f);
 
     gps::SceneObject* b1 = g_sceneManager->SpawnObject("Base_P1", "baseP1", "oilRig", p1, baseScale);
@@ -1084,9 +1157,8 @@ void SpawnEnemyStartingForce() {
     g_tileManager.GetPlayableRange(minX, maxX, minZ, maxZ);
     const int cx = maxX - 1, cz = maxZ - 1;          // P2 corner (matches spawnBases)
 
-    // Match the ground plane used by mouse placement (screenToWorld returns y=-60),
-    // so enemy units sit on the same surface as user-placed ones.
-    const float kGroundY = -60.0f;
+    // Match the ground plane used by mouse placement (screenToWorld returns
+    // y=kGroundY), so enemy units sit on the same surface as user-placed ones.
     auto tileAt = [&](int gx, int gz) {
         glm::vec3 p = g_tileManager.GridToWorld(gx, gz);
         p.y = kGroundY;
@@ -1303,6 +1375,56 @@ void renderRangeCircles() {
         }
     }
 
+    glBindVertexArray(0);
+    glLineWidth(1.0f);
+    glDisable(GL_BLEND);
+}
+
+// Per-frame: integrate spark velocity + age, drop dead ones. Then draw each as
+// a tiny ring using the existing range-circle shader/VAO so we don't need a new
+// shader just for this. Lifetime ~0.5s, gravity pulls them down for a brief arc.
+void renderSparks() {
+    if (g_circleVAO == 0) return;
+
+    // Integrate first (separate from rendering so the same code path advances
+    // sparks during a frame where the camera might not have updated yet).
+    constexpr float kGravity = 60.0f;
+    for (size_t i = 0; i < g_sparks.size();) {
+        Spark& s = g_sparks[i];
+        s.age += deltaTime;
+        if (s.age >= s.life) {
+            g_sparks[i] = g_sparks.back();
+            g_sparks.pop_back();
+            continue;
+        }
+        s.vel.y -= kGravity * deltaTime;
+        s.pos   += s.vel   * deltaTime;
+        ++i;
+    }
+    if (g_sparks.empty()) return;
+
+    rangeCircleShader.useShaderProgram();
+    glm::mat4 view = myCamera.getViewMatrix();
+    glUniformMatrix4fv(circleViewLoc, 1, GL_FALSE, glm::value_ptr(view));
+    glUniformMatrix4fv(circleProjLoc, 1, GL_FALSE, glm::value_ptr(projection));
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glLineWidth(2.0f);
+    glBindVertexArray(g_circleVAO);
+
+    for (const Spark& s : g_sparks) {
+        const float t      = s.age / s.life;
+        const float alpha  = (1.0f - t) * s.color.a;
+        const float radius = 1.4f + (1.0f - t) * 1.6f; // shrinks as it ages
+        glm::mat4 model = glm::scale(
+            glm::translate(glm::mat4(1.0f), s.pos),
+            glm::vec3(radius, 1.0f, radius));
+        glUniformMatrix4fv(circleModelLoc, 1, GL_FALSE, glm::value_ptr(model));
+        glm::vec4 col(s.color.r, s.color.g, s.color.b, alpha);
+        glUniform4fv(circleColorLoc, 1, glm::value_ptr(col));
+        glDrawArrays(GL_LINE_LOOP, 0, g_circleVertCount);
+    }
     glBindVertexArray(0);
     glLineWidth(1.0f);
     glDisable(GL_BLEND);
@@ -1556,6 +1678,18 @@ void processMovement() {
         }
     }
 
+    // Control groups: Ctrl+N saves current selection into slot N (0..9);
+    // pressing N alone recalls slot N; Shift+N appends slot N to current.
+    if (g_selectionSystem) {
+        const bool ctrl  = input.IsKeyPressed(GLFW_KEY_LEFT_CONTROL) || input.IsKeyPressed(GLFW_KEY_RIGHT_CONTROL);
+        const bool shift = input.IsKeyPressed(GLFW_KEY_LEFT_SHIFT)   || input.IsKeyPressed(GLFW_KEY_RIGHT_SHIFT);
+        for (int k = 0; k <= 9; ++k) {
+            if (!input.IsKeyJustPressed(GLFW_KEY_0 + k)) continue;
+            if (ctrl) g_selectionSystem->SaveGroup(k);
+            else      g_selectionSystem->RecallGroup(k, /*append=*/shift);
+        }
+    }
+
     if (input.IsKeyJustPressed(GLFW_KEY_F5)) {
         g_editorState->ToggleMode();
         g_selectionSystem->SetEditModeSelection(g_editorState->IsEditMode());
@@ -1724,11 +1858,10 @@ glm::vec3 screenToWorld(const glm::vec2& screenPos) {
     // forward direction. We use the camera's front direction directly.
     glm::vec3 rayDirection = myCamera.getCameraFrontDirection();
 
-    // Find where this ray intersects the ground plane at y = -60
+    // Find where this ray intersects the gameplay ground plane (y = kGroundY).
     // Ray equation: P = origin + t * direction
-    // We want P.y = -60, so: nearPointWorld.y + t * rayDirection.y = -60
-    float groundY = -60.0f;
-    float t = (groundY - nearPointWorld.y) / rayDirection.y;
+    // We want P.y = kGroundY, so: nearPointWorld.y + t * rayDirection.y = kGroundY
+    float t = (kGroundY - nearPointWorld.y) / rayDirection.y;
 
     // Calculate the final intersection point
     glm::vec3 intersectionPoint = glm::vec3(nearPointWorld) + t * rayDirection;
@@ -1780,20 +1913,6 @@ int main(int argc, const char* argv[]) {
     spawnBases();
     SpawnEnemyStartingForce();
 
-    std::cout << "✅ Initialization complete!" << std::endl;
-    std::cout << "\n🎮 CONTROLS:" << std::endl;
-    std::cout << "  WASD - Move camera" << std::endl;
-    std::cout << "  B - Spawn single troop" << std::endl;
-    std::cout << "  N - Spawn troop formation (10 troops)" << std::endl;
-    std::cout << "  T - Select all troops" << std::endl;
-    std::cout << "  C - Clear selection" << std::endl;
-    std::cout << "  Left Mouse - Box selection (hold SHIFT to add)" << std::endl;
-    std::cout << "  Right Mouse - Move selected troops" << std::endl;
-    std::cout << "  Place mode: use GUI 'Place ...' button, then Left Mouse to place" << std::endl;
-    std::cout << "  Right Mouse or X - Cancel place mode" << std::endl;
-    std::cout << "  Scroll - Zoom" << std::endl;
-    std::cout << "  ESC - Exit\n" << std::endl;
-
     // Game loop
     lastFrameTime = glfwGetTime();
 
@@ -1801,6 +1920,8 @@ int main(int argc, const char* argv[]) {
         // Update
         gps::InputManager::Instance().Update();
         updateDeltaTime();
+
+        glfwPollEvents();
 
         processMovement();
 
@@ -1871,6 +1992,57 @@ int main(int argc, const char* argv[]) {
                 if (g_guiManager) {
                     g_guiManager->SetVictory(g_baseP2ID == -2);
                     g_guiManager->SetDefeat (g_baseP1ID == -2);
+                }
+            }
+        }
+
+        // Enemy AI — every kEnemyOrderInterval seconds (after grace ends),
+        // dispatch up to 2 idle enemy combat ships toward the P1 base. Reuses
+        // MovementData verbatim; existing CombatSystem handles engagement when
+        // they come into range.
+        {
+            static double s_lastEnemyOrder = 0.0;
+            constexpr double kEnemyOrderInterval = 25.0;
+            const double now = glfwGetTime();
+            const bool   postGrace = (now - g_matchStartTime) >= kMatchGraceSec;
+            if (g_matchActive && postGrace && g_baseP1ID >= 0
+                && (now - s_lastEnemyOrder) > kEnemyOrderInterval)
+            {
+                s_lastEnemyOrder = now;
+                gps::SceneObject* p1Base = g_scene->GetObjectByID(g_baseP1ID);
+                if (p1Base) {
+                    const glm::vec3 target = p1Base->GetWorldCenter();
+                    int dispatched = 0;
+                    for (const auto& objPtr : g_scene->GetObjects()) {
+                        if (dispatched >= 2) break;
+                        gps::SceneObject* o = objPtr.get();
+                        if (!o->IsActive() || !o->unitStats.isAlive) continue;
+                        if (o->unitStats.faction != 2)             continue;
+                        if (!o->unitStats.isMovable)               continue;
+                        if (!o->unitStats.isCombatUnit)            continue;
+                        if (o->movement.isMoving)                  continue;
+                        if (o->patrolData.isPatrolling)            continue;
+                        if (o->orbitData.isOrbiting)               continue;
+
+                        glm::vec3 src = o->GetTransform().GetPosition();
+                        glm::vec3 dir = target - src;
+                        dir.y = 0.0f;
+                        const float dist = glm::length(dir);
+                        if (dist < o->unitStats.attackRange) continue; // already in range
+                        if (dist < 0.0001f) continue;
+                        dir /= dist;
+                        // Stop just outside attack range so the unit can fire.
+                        glm::vec3 dest = target - dir * (o->unitStats.attackRange * 0.8f);
+
+                        o->movement.isMoving      = true;
+                        o->movement.moveStartPos  = src;
+                        o->movement.moveEndPos    = dest;
+                        o->movement.moveStartTime = static_cast<float>(now);
+                        o->movement.moveDuration  = 4.0f;
+                        o->movement.moveDirection = dir;
+                        o->unitStats.targetID     = g_baseP1ID;
+                        ++dispatched;
+                    }
                 }
             }
         }
@@ -2111,6 +2283,8 @@ int main(int argc, const char* argv[]) {
                     if (glm::distance(victim->GetWorldCenter(), minePos) > kMineSplashRadius) continue;
                     ApplyDamageTo(victim, kMineDamage, mine->GetID(), mineKilled);
                 }
+                // Bigger, redder burst for a mine — it's a hard explosion.
+                EmitSparks(minePos, 24, glm::vec4(1.0f, 0.30f, 0.10f, 1.0f), 50.0f, 0.7f);
                 minesToDestroy.push_back(mine->GetID());
             }
             CleanupKilled(mineKilled);
@@ -2155,9 +2329,13 @@ int main(int argc, const char* argv[]) {
                         if (glm::distance(victim->GetWorldCenter(), impact) > splash) continue;
                         ApplyDamageTo(victim, dmg, obj->projectileData.ownerID, killed);
                     }
+                    // Big AOE burst for splash impact.
+                    EmitSparks(impact, 16, glm::vec4(1.0f, 0.55f, 0.15f, 1.0f), 38.0f, 0.55f);
                 } else {
-                    ApplyDamageTo(g_scene->GetObjectByID(obj->projectileData.targetID),
-                                  dmg, obj->projectileData.ownerID, killed);
+                    gps::SceneObject* tgt = g_scene->GetObjectByID(obj->projectileData.targetID);
+                    if (tgt) EmitSparks(tgt->GetWorldCenter(), 10,
+                                        glm::vec4(1.0f, 0.65f, 0.20f, 1.0f), 28.0f, 0.45f);
+                    ApplyDamageTo(tgt, dmg, obj->projectileData.ownerID, killed);
                 }
                 toDestroy.push_back(obj->GetID());
             }
@@ -2258,6 +2436,9 @@ int main(int argc, const char* argv[]) {
         // Render range circles for selected combat units
         renderRangeCircles();
 
+        // Damage feedback sparks (re-uses the range-circle shader).
+        renderSparks();
+
         // Debug overlay: collision spheres / model bounds (toggled in Debug panel)
         renderDebugBounds();
 
@@ -2281,7 +2462,6 @@ int main(int argc, const char* argv[]) {
 
 
         // Swap buffers
-        glfwPollEvents();
         glfwSwapBuffers(glWindow);
     }
 

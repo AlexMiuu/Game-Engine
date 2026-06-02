@@ -399,29 +399,42 @@ namespace gps {
 		std::string tag = object->GetTag();
         UnitStats stats= object->unitStats;
 
+        // ─── BALANCE MODEL ──────────────────────────────────────────────────
+        // DPS = attack / baseAttackCooldown (default cooldown = 1.0s).
+        // Roles are kept distinct by trading range vs HP vs DPS rather than
+        // letting one stat dominate (e.g. the old turret's 300 DPS).
+        //   ship      light skirmisher   HP 120  DPS 18  range  90
+        //   frigate   ranged backbone    HP 260  DPS 30  range 120
+        //   destroyer heavy AOE          HP 600  DPS 30  range  80  (splash)
+        //   aircraft  carrier air strike HP  80  DPS 45  range  70  (splash)
+        //   turret    point defence      HP 150  DPS 50  range  90  (rapid)
         if (tag == "ship")
         {
-            stats.health = 100;
-            stats.attack = 20;
-            stats.maxHealth = 100;
-            stats.attackRange = 85.0f;
+            stats.health = 120;
+            stats.attack = 18;
+            stats.maxHealth = 120;
+            stats.attackRange = 90.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = true;
             stats.faction = 1;
             stats.attackMode = AttackMode::Projectile;
+            stats.price = 100;
         }
         else if (tag == "enemyShip")
         {
-            stats.health = 100;
-            stats.attack = 20;
-            stats.maxHealth = 100;
-            stats.attackRange = 15.0f;
+            // Legacy mirror of "ship" for faction 2 (enemy ships actually spawn
+            // with the "ship" tag today; kept consistent so it isn't a downgrade
+            // if re-used).
+            stats.health = 120;
+            stats.attack = 18;
+            stats.maxHealth = 120;
+            stats.attackRange = 190.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = true;
             stats.faction = 2;
-            stats.attackMode = AttackMode::Melee;
+            stats.attackMode = AttackMode::Projectile;
         }
         else if (tag == "oilRig")
         {
@@ -450,10 +463,10 @@ namespace gps {
         }
         else if (tag == "frigate")
         {
-            stats.health = 250;
-            stats.attack = 50;
-            stats.maxHealth = 250;
-            stats.attackRange = 105.0f;
+            stats.health = 260;
+            stats.attack = 30;
+            stats.maxHealth = 260;
+            stats.attackRange = 420.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = true;
@@ -462,23 +475,29 @@ namespace gps {
 		}
         else if (tag == "destroyer")
         {
-            stats.health = 1000;
-            stats.attack = 100;
-            stats.maxHealth = 1000;
-            stats.attackRange = 55.0f;
+            // Heavy bruiser: most HP of the mobile line and the only splashing
+            // ship, but slow cadence (2s) and short range so it must close in.
+            stats.health = 600;
+            stats.attack = 60;
+            stats.maxHealth = 600;
+            stats.attackRange = 280.0f;
+            stats.baseAttackCooldown = 2.0f; // 60 dmg / 2s = 30 DPS, AOE
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = true;
             stats.faction = 1;
             stats.attackMode = AttackMode::ProjectileSplash;
-            stats.splashRadius = 15.0f;
+            stats.splashRadius = 20.0f;
         }
         else if(tag =="aircraftCarrier")
         {
-            stats.health = 1000;
+            // Capital ship: no gun of its own (attack 0); its damage comes from
+            // the orbiting aircraft it deploys. Big HP pool, the attackRange
+            // doubles as the plane's orbit radius (SpawnCarrierAircraft).
+            stats.health = 1200;
             stats.attack = 0;
-            stats.maxHealth = 1000;
-            stats.attackRange = 100.0f;
+            stats.maxHealth = 1200;
+            stats.attackRange = 420.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = true;
@@ -486,27 +505,35 @@ namespace gps {
         }
         else if (tag == "aircraft")
         {
-            stats.health = 100;
-            stats.attack = 100;
-            stats.maxHealth = 100;
+            // Carrier strike plane: fragile, can't be controlled (orbits its
+            // parent), but hits hard. Fires a tinted air-to-ground projectile so
+            // the attack is *visible* — reuses the same SpawnCannonBall path as
+            // ships/turrets instead of dealing silent melee damage.
+            stats.health = 80;
+            stats.attack = 45;
+            stats.maxHealth = 80;
             stats.attackRange = 150.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = false;
             stats.faction = 1;
+            stats.attackMode = AttackMode::ProjectileSplash;
+            stats.splashRadius = 60.0f;
         }
         else if (tag == "turret")
         {
-            stats.health = 150;
-            stats.attack = 15;
-            stats.maxHealth = 150;
-            stats.attackRange = 150.0f;
+            // CIWS point-defence: rapid tracers, but DPS tamed from the old 300
+            // (15 dmg @ 0.05s) to 50 so it deters rushes without hard-walling.
+            stats.health = 350;
+            stats.attack = 5;
+            stats.maxHealth = 350;
+            stats.attackRange = 420.0f;
             stats.isCombatUnit = true;
             stats.isAlive = true;
             stats.isMovable = false;
             stats.faction = 2;
             stats.attackMode = AttackMode::Projectile;
-            stats.baseAttackCooldown = 0.05f; // CIWS-like ~20 rounds/sec
+            stats.baseAttackCooldown = 0.1f; // ~10 rounds/sec, 50 DPS
         }
         else if (tag == "mine")
         {

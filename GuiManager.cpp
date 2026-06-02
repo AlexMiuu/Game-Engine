@@ -247,6 +247,21 @@ namespace gps {
                 "Selected: %zu", m_selectionSystem->GetSelectionCount());
         }
 
+        // Control groups indicator: lists slots that contain something.
+        if (m_selectionSystem) {
+            std::string groups;
+            for (int k = 0; k <= 9; ++k) {
+                if (m_selectionSystem->GetGroupSize(k) > 0) {
+                    if (!groups.empty()) groups += " ";
+                    groups += std::to_string(k);
+                }
+            }
+            if (!groups.empty()) {
+                ImGui::SameLine(0, 20);
+                ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "Groups: %s", groups.c_str());
+            }
+        }
+
         // Camera pos — dreapta
         ImGui::SameLine(viewport->WorkSize.x - 280);
         ImGui::TextColored(ImVec4(0.6f, 0.6f, 0.7f, 1.0f),
@@ -1249,6 +1264,11 @@ namespace gps {
         return ImGui::GetIO().WantCaptureKeyboard;
     }
 
+    bool GuiManager::WantsTextInput() const {
+        if (!m_initialized) return false;
+        return ImGui::GetIO().WantTextInput;
+    }
+
     // ===========================
     // HELPER: buton colorat
     // ===========================
@@ -1342,6 +1362,8 @@ namespace gps {
         ImGui::BulletText("N                  Spawn Formation");
         ImGui::BulletText("T                  Select all troops");
         ImGui::BulletText("C                  Clear selection");
+        ImGui::BulletText("Ctrl+0..9          Save selection as control group");
+        ImGui::BulletText("0..9               Recall control group (Shift+N to append)");
         ImGui::BulletText("X                  Cancel placement mode");
         ImGui::BulletText("P                  Pause / Resume");
 
@@ -1602,6 +1624,15 @@ namespace gps {
     }
 
     // ===========================
+    // FLOATING DAMAGE NUMBERS
+    // ===========================
+    void GuiManager::PushFloatingNumber(const glm::vec3& worldPos, int amount, bool kill) {
+        // Cap the queue so a long firefight can't grow it unbounded.
+        if (m_floatingNumbers.size() >= 64) m_floatingNumbers.erase(m_floatingNumbers.begin());
+        m_floatingNumbers.push_back({ worldPos, static_cast<float>(amount), 0.0f, kill });
+    }
+
+    // ===========================
     // HEALTH BARS — billboard above each alive unit
     // ===========================
     void GuiManager::RenderHealthBars() {
@@ -1652,6 +1683,38 @@ namespace gps {
             dl->AddRectFilled(a, b, bg);
             dl->AddRectFilled(a, ImVec2(a.x + w * frac, b.y), fg);
             dl->AddRect(a, b, border);
+        }
+
+        // Floating damage numbers — drift upward, fade, drop after ~1s.
+        const float kDamageNumberLifetime = 1.0f;
+        for (size_t i = 0; i < m_floatingNumbers.size();) {
+            FloatingNumber& fn = m_floatingNumbers[i];
+            fn.age += m_deltaTime;
+            if (fn.age >= kDamageNumberLifetime) {
+                m_floatingNumbers.erase(m_floatingNumbers.begin() + i);
+                continue;
+            }
+            glm::vec3 wp = fn.worldPos + glm::vec3(0.0f, fn.age * 25.0f + 4.0f, 0.0f);
+            glm::vec4 clip = vpMat * glm::vec4(wp, 1.0f);
+            if (clip.w <= 0.0001f) { ++i; continue; }
+            glm::vec3 ndc = glm::vec3(clip) / clip.w;
+            if (ndc.x < -1.2f || ndc.x > 1.2f || ndc.y < -1.2f || ndc.y > 1.2f) { ++i; continue; }
+            const float sx = vpPos.x + (ndc.x * 0.5f + 0.5f) * vpSize.x;
+            const float sy = vpPos.y + (1.0f - (ndc.y * 0.5f + 0.5f)) * vpSize.y;
+            const float t = fn.age / kDamageNumberLifetime;
+            const int alpha = (int)(255 * (1.0f - t));
+            const ImU32 col = fn.kill ? IM_COL32(255,  60,  60, alpha)   // red on kill
+                                      : IM_COL32(255, 165,  40, alpha);  // orange on hit
+            char buf[16];
+            snprintf(buf, sizeof(buf), "-%d", (int)fn.amount);
+            // Slightly larger for kill hits so they read at a glance.
+            const float scale = fn.kill ? 1.5f : 1.2f;
+            const float fontSize = ImGui::GetFontSize() * scale;
+            ImFont* font = ImGui::GetFont();
+            dl->AddText(font, fontSize, ImVec2(sx + 1, sy + 1),
+                        IM_COL32(0, 0, 0, alpha), buf);
+            dl->AddText(font, fontSize, ImVec2(sx, sy), col, buf);
+            ++i;
         }
     }
 

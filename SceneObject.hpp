@@ -44,6 +44,8 @@ namespace gps {
         Defensive,   // +30% damage dealt, holds ground (retaliates only)
     };
 
+    struct PircePoints {}
+
     struct UnitStats {
         int maxHealth = 100;
         int health = 100;
@@ -69,6 +71,7 @@ namespace gps {
 
         // Faction: 0 = neutral (attackable by all), 1 = team 1, 2 = team 2
         int faction = 0;
+        int price = 0; // for buyable units/props
     };
 
     struct ProjectileData {

@@ -73,9 +73,12 @@ namespace gps {
             (origin->unitStats.attackMode == AttackMode::ProjectileSplash)
             ? origin->unitStats.splashRadius : 0.0f;
 
-        // CIWS rounds render red.
+        // CIWS rounds render red; carrier aircraft fire a bright yellow
+        // air-to-ground tracer so the strike reads clearly from above.
         if (origin->GetTag() == "turret")
             cannonBall->projectileData.tint = glm::vec3(1.0f, 0.15f, 0.15f);
+        else if (origin->GetTag() == "aircraft")
+            cannonBall->projectileData.tint = glm::vec3(1.0f, 0.9f, 0.2f);
 
         cannonBall->movement.isMoving      = true;
         cannonBall->movement.moveStartPos  = origin->GetWorldCenter();

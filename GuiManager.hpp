@@ -124,6 +124,10 @@ namespace gps {
         // Mouse/keyboard capture
         bool WantsMouseInput() const;
         bool WantsKeyboardInput() const;
+        // True only while an ImGui text field is actively focused. Use this
+        // (not WantsKeyboardInput) to gate game hotkeys, otherwise the nav
+        // keyboard flag keeps WantCaptureKeyboard sticky after any panel click.
+        bool WantsTextInput() const;
 
         // Debug toggles � citeste-le din main.cpp
         bool isWireframeEnabled = false;
@@ -196,6 +200,20 @@ namespace gps {
         // Pre-combat grace window countdown ("Battle starts in 3..."). Driven
         // from main each frame; <=0 hides the overlay.
         float     m_graceSecRemaining = 0.0f;
+
+    public:
+        // Floating damage numbers — one entry per damage hit, drained over
+        // ~1s by RenderHealthBars. Pushed from main.cpp's ApplyDamageTo.
+        struct FloatingNumber {
+            glm::vec3 worldPos;
+            float     amount;
+            float     age;
+            bool      kill; // red if true (lethal), orange otherwise
+        };
+        void PushFloatingNumber(const glm::vec3& worldPos, int amount, bool kill);
+
+    private:
+        std::vector<FloatingNumber> m_floatingNumbers;
     };
 
 } // namespace gps

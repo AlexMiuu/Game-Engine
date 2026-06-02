@@ -14,6 +14,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <unordered_set>
 #include <memory>
+#include <array>
 #include "RayCaster.hpp"
 
 #if defined (__APPLE__)
@@ -238,7 +239,18 @@ namespace gps {
         int GetObjectAtPoint(Scene& scene, const Camera& camera,const glm::mat4& projection,const glm::vec2& screenPos) const;
 
         void SetEditModeSelection(bool enabled) { m_editModeSelection = enabled; }
-        
+
+        // ===========================
+        // CONTROL GROUPS (Ctrl+N save, N recall, Shift+N append)
+        // ===========================
+
+        /** Save current selection into slot (0..9). */
+        void SaveGroup(int slot);
+        /** Recall slot into selection. If append==true, merges with current. */
+        void RecallGroup(int slot, bool append);
+        /** Number of IDs stored in a control group (0 if empty). */
+        size_t GetGroupSize(int slot) const;
+
     private:
         // ===========================
         // STATE
@@ -268,6 +280,9 @@ namespace gps {
 
         bool m_initialized;
         bool m_editModeSelection =false;
+
+        // Control group slots 0..9. Index = digit on the number row.
+        std::array<std::unordered_set<int>, 10> m_controlGroups;
         // ===========================
         // INTERNAL HELPERS
         // ===========================

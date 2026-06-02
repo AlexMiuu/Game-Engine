@@ -361,6 +361,26 @@ namespace gps {
     }
 
     // ===========================
+    // CONTROL GROUPS
+    // ===========================
+
+    void SelectionSystem::SaveGroup(int slot) {
+        if (slot < 0 || slot >= 10) return;
+        m_controlGroups[slot] = m_selectedIDs;
+    }
+
+    void SelectionSystem::RecallGroup(int slot, bool append) {
+        if (slot < 0 || slot >= 10) return;
+        if (!append) m_selectedIDs.clear();
+        m_selectedIDs.insert(m_controlGroups[slot].begin(), m_controlGroups[slot].end());
+    }
+
+    size_t SelectionSystem::GetGroupSize(int slot) const {
+        if (slot < 0 || slot >= 10) return 0;
+        return m_controlGroups[slot].size();
+    }
+
+    // ===========================
     // INTERNAL HELPERS
     // ===========================
 
