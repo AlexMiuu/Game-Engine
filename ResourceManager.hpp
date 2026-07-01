@@ -8,6 +8,8 @@
 
 #include <string>
 #include <unordered_map>
+#include <initializer_list>
+#include <utility>
 
 namespace gps {
 
@@ -34,16 +36,15 @@ namespace gps {
             return true;
         }
 
-        bool Spend(const std::string &type[], const float amounts[], int count) {
-            // Check if all resources are sufficient
-            for (int i = 0; i < count; ++i) {
-                auto it = m_pools.find(type[i]);
-                if (it == m_pools.end() || it->second < amounts[i]) return false;
-            }
-            // Deduct all resources
-            for (int i = 0; i < count; ++i) {
-                m_pools[type[i]] -= amounts[i];
-            }
+        // Spend several resources at once. Atomic: only deducts if EVERY pool
+        // can cover its share, otherwise nothing is spent and it returns false.
+        // Doubles as the affordability check for multi-cost purchases.
+        // Usage: Spend({ {"Oil", 10.0f}, {"Fish", 20.0f} });
+        bool Spend(std::initializer_list<std::pair<std::string, float>> costs) {
+            for (const auto& c : costs)            // verify affordability first
+                if (Get(c.first) < c.second) return false;
+            for (const auto& c : costs)            // then deduct (atomic)
+                m_pools[c.first] -= c.second;
             return true;
         }
 

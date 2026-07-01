@@ -17,6 +17,12 @@
 
 namespace gps {
 
+    // Single source of truth for placement prices, keyed by prop tag. Used both
+    // by InitializeUnitsStats (to stamp each spawned unit's price) and by the
+    // spawn-panel GUI (to show costs / grey out unaffordable props without
+    // having to spawn anything first).
+    UnitStats::PricePoints GetPropPrice(const std::string& tag);
+
     /**
      * @brief Manager pentru crearea ?i gestionarea obiectelor �n scen�
      *

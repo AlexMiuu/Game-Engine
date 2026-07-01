@@ -394,10 +394,30 @@ namespace gps {
 
 
 
+	// Placement price table (Oil + Fish), keyed by prop tag. Kept in one place so
+	// the spawn-panel GUI and the placement handler read identical numbers.
+	UnitStats::PricePoints GetPropPrice(const std::string& tag) {
+		UnitStats::PricePoints p; // defaults to {0, 0}
+		if      (tag == "ship")            { p.oil = 10; p.fish = 20; }
+		else if (tag == "enemyShip")       { p.oil = 10; p.fish = 20; }
+		else if (tag == "oilRig")          { p.oil = 50; p.fish =  0; }
+		else if (tag == "fishBoat")        { p.oil = 10; p.fish =  0; }
+		else if (tag == "frigate")         { p.oil = 20; p.fish = 40; }
+		else if (tag == "destroyer")       { p.oil = 30; p.fish = 60; }
+		else if (tag == "aircraftCarrier") { p.oil = 40; p.fish = 80; }
+		else if (tag == "turret")          { p.oil = 15; p.fish = 30; }
+		// aircraft, mine, bases: free (0/0).
+		return p;
+	}
+
 	UnitStats SceneManager::InitializeUnitsStats(SceneObject* object) {
 		
 		std::string tag = object->GetTag();
         UnitStats stats= object->unitStats;
+
+        // Placement cost comes from the shared price table (single source of
+        // truth shared with the spawn-panel GUI).
+        stats.price = GetPropPrice(tag);
 
         // ─── BALANCE MODEL ──────────────────────────────────────────────────
         // DPS = attack / baseAttackCooldown (default cooldown = 1.0s).
@@ -419,7 +439,6 @@ namespace gps {
             stats.isMovable = true;
             stats.faction = 1;
             stats.attackMode = AttackMode::Projectile;
-            stats.price = 100;
         }
         else if (tag == "enemyShip")
         {
@@ -540,10 +559,11 @@ namespace gps {
             // Stationary contact mine: low HP (easy to snipe with ranged units),
             // no attack stat — damage is applied by the per-frame mine loop in
             // main.cpp when an enemy movable unit enters detonation range.
-            stats.health       = 50;
-            stats.maxHealth    = 50;
+            stats.health       = 1000;
+            stats.maxHealth    = 1000;
             stats.attack       = 0;
             stats.attackRange  = 0.0f;
+            stats.faction = 1;
             stats.isCombatUnit = false;
             stats.isAlive      = true;
             stats.isMovable    = false;

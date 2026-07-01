@@ -73,9 +73,6 @@ bool         dragHasPrev        = false;
 glm::vec3    dragPrevWorld      = glm::vec3(0.0f);
 double       lastFPressTime     = -10.0;
 
-// Oil cost for placing a prop. Mirrored in GuiManager.cpp for the spawn-panel
-// disabled state and cost label.
-constexpr float kPropPlacementOilCost = 10.0f;
 // Delay (seconds) before an aircraft carrier deploys a replacement plane after
 // its current one is shot down.
 constexpr float kAircraftRespawnDelay = 5.0f;
@@ -169,6 +166,7 @@ gps::Model3D aircraft;
 gps::Model3D aircraftCarrier;
 gps::Model3D turret;
 gps::Model3D projectile;
+gps::Model3D bomb;
 
 // Hex tile models (objects/tiles/*.obj). Center-to-vertex = 5.587 in model units.
 gps::Model3D waterTile;
@@ -610,7 +608,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
     // Placement mode: left click places selected prop and skips selection box logic.
     if (g_sceneManager->m_propPlacementMode && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-        if (g_sceneManager && resourceManager.Get("Oil") >= kPropPlacementOilCost) {
+        if (g_sceneManager) {
             glm::vec3 worldPos = screenToWorld(mousePos);
 
             glm::vec3 gridMin, gridMax;
@@ -669,12 +667,24 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             }
             
             if (spawned) {
+                // Charge the prop's per-unit Oil + Fish price atomically. If the
+                // player can't afford BOTH, nothing is spent and we reject the
+                // placement (same pattern as the collision/tile rejections above).
+                const gps::UnitStats::PricePoints& price = spawned->unitStats.price;
+                if (!resourceManager.Spend({ {"Oil",  (float)price.oil},
+                                             {"Fish", (float)price.fish} })) {
+                    std::cout << "Placement blocked: not enough resources ("
+                              << price.oil << " Oil / " << price.fish << " Fish)" << std::endl;
+                    g_scene->DestroyObject(spawned->GetID());
+                    spawned = nullptr;
+                    return;
+                }
+                g_matchOilSpent += price.oil;
+
                 // Apply the selected faction (Friendly / Enemy) over whatever
                 // InitializeUnitsStats defaulted to based on the unit's tag.
                 spawned->unitStats.faction = g_sceneManager->m_propPlacementFaction;
 
-                resourceManager.Spend("Oil", kPropPlacementOilCost);
-                g_matchOilSpent += kPropPlacementOilCost;
                 std::cout << "Placed " << g_sceneManager->m_propPlacementLabel << " at ("
                     << worldPos.x << ", " << worldPos.y << ", " << worldPos.z << ")" << std::endl;
 
@@ -981,6 +991,7 @@ void initModels() {
     aircraftCarrier.LoadModel("objects/aircraftCarrier/AircraftCarrier.obj","textures/");
     turret.LoadModel("objects/tiles/ciws.obj", "textures/");
     projectile.LoadModel("objects/projectile/Projectile.obj", "textures/");
+    bomb.LoadModel("objects/bomb/bomb.obj", "textures/");
     waterTile.LoadModel("objects/tiles/waterTile.obj", "textures/");
     oilTile.LoadModel("objects/tiles/oilTile.obj", "textures/");
     fishTile.LoadModel("objects/tiles/fishTile.obj", "textures/");
@@ -1093,6 +1104,7 @@ void initSceneManager() {
     g_sceneManager->RegisterModel("aircraftCarrier",&aircraftCarrier);
     g_sceneManager->RegisterModel("turret", &turret);
     g_sceneManager->RegisterModel("projectile", &projectile);
+    g_sceneManager->RegisterModel("bomb", &bomb);
     g_sceneManager->RegisterModel("fishBoat", &fishBoat);
 
     g_tileManager.Initialize(&waterTile, g_scene);
@@ -1190,8 +1202,8 @@ void SpawnEnemyStartingForce() {
     SpawnEnemyUnit("Enemy_OilRig_2", "oilRig", "oilRig", tileAt(cx, cz + 1), 2.5f);
 
     // Defense — CIWS on the freshly-stamped Land tiles.
-    SpawnEnemyUnit("Enemy_Turret_1", "turret", "turret", tileAt(cx - 2, cz), 10.5f);
-    SpawnEnemyUnit("Enemy_Turret_2", "turret", "turret", tileAt(cx, cz - 2), 10.5f);
+    SpawnEnemyUnit("Enemy_Turret_1", "turret", "turret", tileAt(cx - 2, cz), 15.0f);
+    SpawnEnemyUnit("Enemy_Turret_2", "turret", "turret", tileAt(cx, cz - 2), 15.0f);
 
     // Army — ships + frigate + carrier in open water. Force each cell to Sea
     // so the procedural Land/Shallows assignment doesn't ground them.
@@ -1200,13 +1212,13 @@ void SpawnEnemyStartingForce() {
     };
     for (const auto& [gx, gz] : navalCells) force(gx, gz, gps::TileType::Sea);
 
-    SpawnEnemyUnit("Enemy_Ship_1", "ship",    "ship",    tileAt(cx - 3, cz - 1), 4.5f);
-    SpawnEnemyUnit("Enemy_Ship_2", "ship",    "ship",    tileAt(cx - 1, cz - 3), 4.5f);
-    SpawnEnemyUnit("Enemy_Frigate","frigate", "frigate", tileAt(cx - 3, cz - 3), 4.5f);
+    SpawnEnemyUnit("Enemy_Ship_1", "ship",    "ship",    tileAt(cx - 3, cz - 1), 6.5f);
+    SpawnEnemyUnit("Enemy_Ship_2", "ship",    "ship",    tileAt(cx - 1, cz - 3), 6.5f);
+    SpawnEnemyUnit("Enemy_Frigate","frigate", "frigate", tileAt(cx - 3, cz - 3), 6.5f);
     gps::SceneObject* carrier = SpawnEnemyUnit("Enemy_Carrier", "aircraftCarrier",
                                                "aircraftCarrier",
                                                tileAt(cx - 4, cz - 4),
-                                               4.5f);
+                                               6.5f);
     if (carrier) SpawnCarrierAircraft(carrier);
 }
 
@@ -2165,9 +2177,12 @@ int main(int argc, const char* argv[]) {
             // Sphere-sphere collisions: slide along the contact instead of locking up.
             if (g_collisionSystem && !obj->projectileData.isProjectile) {
                 gps::SceneObject* other = g_collisionSystem->GetCollidingObject(obj);
-                // Same-faction movable units phase through each other so troops
-                // don't deadlock when they brush past one another.
-                if (other && other->unitStats.isMovable
+                // Same-faction units phase through each other so troops don't
+                // deadlock brushing past one another. Friendly mines are also
+                // phased through (they only arm on enemy contact), so a boat can
+                // sail over its own minefield — but other immovable buildings
+                // (turrets, oil rigs, bases) stay solid.
+                if (other && (other->unitStats.isMovable || other->GetTag() == "mine")
                           && obj->unitStats.faction != 0
                           && obj->unitStats.faction == other->unitStats.faction) {
                     other = nullptr;

@@ -17,10 +17,6 @@
 #include <cmath>
 #include <limits>
 
-// Oil cost for placing a prop via the spawn panel. Mirrors main.cpp; kept here
-// so the spawn buttons can grey out and surface the price.
-static constexpr float kPropPlacementOilCost = 50.0f;
-
 namespace gps {
 
     GuiManager::GuiManager()
@@ -280,7 +276,7 @@ namespace gps {
         ImGui::Begin("Spawn Units", nullptr);
 
         const float oil  = gps::ResourceManager::Instance().Get("Oil");
-        const bool  poor = oil < kPropPlacementOilCost;
+        const float fish = gps::ResourceManager::Instance().Get("Fish");
 
         // Faction toggle: every spawnable can be placed as friendly OR enemy.
         // The faction is stored on SceneManager's prop-placement state and
@@ -323,31 +319,36 @@ namespace gps {
                               const std::string& model, const std::string& tag,
                               float scale, const std::string& displayName)
         {
-            if (poor) ImGui::BeginDisabled();
+            // Per-prop price (shared table) — grey the button out unless the
+            // player can cover BOTH resources.
+            const gps::UnitStats::PricePoints price = gps::GetPropPrice(tag);
+            const bool affordable = (oil >= price.oil) && (fish >= price.fish);
+
+            if (!affordable) ImGui::BeginDisabled();
             char fullLabel[96];
-            snprintf(fullLabel, sizeof(fullLabel), "%s%s\n(%.0f Oil)",
-                     isEnemy ? "[E] " : "", label, kPropPlacementOilCost);
+            snprintf(fullLabel, sizeof(fullLabel), "%s%s\n(%d Oil / %d Fish)",
+                     isEnemy ? "[E] " : "", label, price.oil, price.fish);
             if (ColoredButton(fullLabel, ImVec2(-1, 44), accent, accentHi)) {
                 if (m_sceneManager) {
                     m_sceneManager->SetPropPlacement(model, tag, glm::vec3(scale), displayName, factionChoice);
                 }
             }
-            if (poor) ImGui::EndDisabled();
+            if (!affordable) ImGui::EndDisabled();
             if (ImGui::IsItemHovered()) {
-                ImGui::SetTooltip("%s\nFaction: %s\nCost: %.0f Oil\nLeft-click to place, right-click or X to cancel.",
-                                  tooltip, isEnemy ? "Enemy (P2)" : "Friendly (P1)", kPropPlacementOilCost);
+                ImGui::SetTooltip("%s\nFaction: %s\nCost: %d Oil / %d Fish\nLeft-click to place, right-click or X to cancel.",
+                                  tooltip, isEnemy ? "Enemy (P2)" : "Friendly (P1)", price.oil, price.fish);
             }
         };
 
         ImGui::SeparatorText("Combat Units");
         spawnEntry("Ship",      "Light combat ship. Projectile attack, mid range.",
-                   "ship", "ship", 4.5f, "Ship");
+                   "ship", "ship", 6.5f, "Ship");
         spawnEntry("Frigate",   "Frigate. Long-range projectile attacker.",
-                   "frigate", "frigate", 4.5f, "Frigate");
+                   "frigate", "frigate", 6.5f, "Frigate");
         spawnEntry("Destroyer", "Destroyer. AOE splash projectile, high HP.",
-                   "destroyer", "destroyer", 4.5f, "Destroyer");
+                   "destroyer", "destroyer", 6.5f, "Destroyer");
         spawnEntry("Carrier",   "Aircraft Carrier. Deploys an orbiting plane; respawns it on death.",
-                   "aircraftCarrier", "aircraftCarrier", 4.5f, "AircraftCarrier");
+                   "aircraftCarrier", "aircraftCarrier", 6.5f, "AircraftCarrier");
 
         ImGui::SeparatorText("Resource Units");
         spawnEntry("Oil Rig",  "Stationary oil extractor. Produces Oil over time.",
@@ -357,15 +358,14 @@ namespace gps {
 
         ImGui::SeparatorText("Buildings");
         spawnEntry("CIWS Turret","CIWS turret. Stationary, very fast fire rate.",
-                   "turret", "turret", 10.5f, "Turret");
+                   "turret", "turret", 15.0f, "Turret");
         spawnEntry("Naval Mine","Stationary contact mine. Detonates on enemy contact, splash damage.",
-                   "projectile", "mine", 2.0f, "Mine");
+                   "bomb", "mine", 6.0f, "Mine");
 
-        if (poor) {
-            ImGui::Spacing();
-            ImGui::TextColored(ImVec4(1.0f, 0.55f, 0.3f, 1.0f),
-                "Need %.0f Oil to place.", kPropPlacementOilCost);
-        }
+        ImGui::Spacing();
+        ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f),
+            "Oil: %.0f   Fish: %.0f   (greyed-out units cost more than you have)",
+            oil, fish);
 
         ImGui::End();
     }
