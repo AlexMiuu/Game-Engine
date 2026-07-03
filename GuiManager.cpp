@@ -11,6 +11,8 @@
 #include "SelectionSystem.hpp"
 #include "TileManager.hpp"
 #include "ResourceManager.hpp"
+#include "Benchmark.hpp"
+#include "SelfTest.hpp"
 #include <iostream>
 #include <cstring>
 #include <algorithm>
@@ -1135,6 +1137,9 @@ namespace gps {
         ImGui::PlotLines("##FPSGraph", m_fpsHistory, 120, m_fpsHistoryIdx,
             nullptr, 0.0f, 120.0f, ImVec2(-1, 40));
 
+        // ─── BENCHMARK & TESTING (capitolul 6) ───
+        RenderBenchmarkSection();
+
         // ─── RENDERING TOGGLES ───
         ImGui::SeparatorText("Rendering");
 
@@ -1220,6 +1225,105 @@ namespace gps {
         }
 
         ImGui::End();
+    }
+
+    // ===========================
+    // BENCHMARK & TESTING (capitolul 6)
+    // ===========================
+    void GuiManager::RenderBenchmarkSection() {
+        if (!ImGui::CollapsingHeader("Benchmark & Testare")) return;
+
+        const ImVec4 green(0.35f, 0.95f, 0.45f, 1.0f);
+        const ImVec4 red  (1.0f,  0.40f, 0.40f, 1.0f);
+        const ImVec4 grey (0.65f, 0.65f, 0.72f, 1.0f);
+        const ImVec4 amber(1.0f,  0.80f, 0.35f, 1.0f);
+
+        // ─── Teste functionale (tabelul 6.1) ───
+        ImGui::SeparatorText("Teste functionale");
+        if (ImGui::Button("Ruleaza testele functionale")) {
+            m_lastReport = SelfTest::RunFunctionalTests();
+            SelfTest::WriteReport(m_lastReport);
+            m_hasReport = true;
+            std::cout << m_lastReport.ToString();
+        }
+        if (m_hasReport) {
+            const bool all = m_lastReport.AllPassed();
+            ImGui::TextColored(all ? green : red, "%d / %d teste trecute",
+                               m_lastReport.Passed(), m_lastReport.Total());
+            ImGui::BeginChild("##testList", ImVec2(0, 120), true);
+            for (const TestCase& c : m_lastReport.cases) {
+                ImGui::TextColored(c.passed ? green : red, "[%s] %s",
+                                   c.passed ? "PASS" : "FAIL", c.name.c_str());
+                if (!c.detail.empty())
+                    ImGui::TextColored(grey, "        %s", c.detail.c_str());
+            }
+            ImGui::EndChild();
+        }
+
+        // ─── Performanta (tabelele 6.2 / 6.3) ───
+        ImGui::SeparatorText("Performanta");
+        if (!m_benchmark) {
+            ImGui::TextColored(grey, "Harness de benchmark nelegat.");
+            return;
+        }
+
+        const bool running = m_benchmark->IsRunning();
+        if (running) {
+            ImGui::TextColored(amber, "%s", m_benchmark->StatusText().c_str());
+            ImGui::ProgressBar(m_benchmark->ProgressFraction(), ImVec2(-1, 0));
+            ImGui::Text("Unitati active: %d   FPS live: %.0f",
+                        m_benchmark->ActiveBenchmarkUnits(), m_benchmark->LiveAvgFps());
+            if (ImGui::Button("Anuleaza")) m_benchmark->Cancel();
+        } else {
+            bool disableVsync = m_benchmark->GetDisableVSync();
+            if (ImGui::Checkbox("Dezactiveaza VSync in timpul rularii", &disableVsync))
+                m_benchmark->SetDisableVSync(disableVsync);
+
+            const bool play = (!m_editorState || m_editorState->IsPlayMode()) && !m_paused;
+            if (!play)
+                ImGui::TextColored(amber, "Ruleaza in modul Joc, fara pauza, inainte de a porni un meci.");
+
+            if (ImGui::Button("Sweep de performanta (100..5000)"))
+                m_benchmark->StartSweep();
+            ImGui::SameLine();
+            if (ImGui::Button("Test de stres"))
+                m_benchmark->StartStress();
+            if (ImGui::Button("Sterge unitatile de benchmark"))
+                m_benchmark->ClearBenchmarkUnits();
+        }
+
+        // ─── Tabel de rezultate ───
+        const std::vector<BenchmarkSample>& res = m_benchmark->Results();
+        if (!res.empty()) {
+            if (ImGui::BeginTable("##benchResults", 4,
+                    ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingStretchProp)) {
+                ImGui::TableSetupColumn("Unitati");
+                ImGui::TableSetupColumn("FPS");
+                ImGui::TableSetupColumn("ms/cadru");
+                ImGui::TableSetupColumn("MB");
+                ImGui::TableHeadersRow();
+                for (const BenchmarkSample& s : res) {
+                    ImGui::TableNextRow();
+                    ImGui::TableNextColumn(); ImGui::Text("%d",   s.unitCount);
+                    ImGui::TableNextColumn();
+                    ImGui::TextColored(s.avgFps >= 30.0f ? green : red, "%.0f", s.avgFps);
+                    ImGui::TableNextColumn(); ImGui::Text("%.2f", s.avgFrameMs);
+                    ImGui::TableNextColumn(); ImGui::Text("%.0f", s.memoryMB);
+                }
+                ImGui::EndTable();
+            }
+
+            if (m_benchmark->GetMode() == BenchmarkHarness::Mode::Stress && !running) {
+                if (m_benchmark->StressFpsBelow30Count() > 0)
+                    ImGui::TextColored(amber, "Sub 30 FPS la %d unitati.",
+                                       m_benchmark->StressFpsBelow30Count());
+                else
+                    ImGui::TextColored(green, "Inca peste 30 FPS la %d unitati.",
+                                       m_benchmark->StressMaxTested());
+            }
+            if (!m_benchmark->LastCsvPath().empty())
+                ImGui::TextColored(grey, "Salvat: %s", m_benchmark->LastCsvPath().c_str());
+        }
     }
 
     // ===========================

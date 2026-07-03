@@ -25,6 +25,8 @@
 #include <vector>
 #include <glm/glm.hpp>
 
+#include "SelfTest.hpp"   // TestReport (afisat in panoul de depanare)
+
 namespace gps {
 
     // Forward declarations
@@ -33,6 +35,7 @@ namespace gps {
     class SelectionSystem;
     class TileManager;
     class EditorState;
+    class BenchmarkHarness;
 
     struct GuiButton {
         std::string label;
@@ -64,6 +67,8 @@ namespace gps {
         void RenderCommandPanel();
         void RenderUnitInfoPanel();
         void RenderDebugPanel();
+        // Sectiune in panoul de depanare: teste functionale + benchmark de performanta.
+        void RenderBenchmarkSection();
         void RenderSpawnPanel();
         void RenderInspectorPanel();
         void RenderHelpOverlay();
@@ -76,6 +81,9 @@ namespace gps {
 
         // Editor state
         void BindEditorState(EditorState* editorState) { m_editorState = editorState; }
+
+        // Benchmark harness (capitolul 6) - condus din sectiunea Debug panel.
+        void BindBenchmark(BenchmarkHarness* benchmark) { m_benchmark = benchmark; }
 
         // Button system
         void AddButton(const GuiButton& button);
@@ -152,6 +160,11 @@ namespace gps {
         SelectionSystem* m_selectionSystem;
         TileManager* m_tileManager;
         EditorState* m_editorState;
+        BenchmarkHarness* m_benchmark = nullptr;
+
+        // Ultimul raport al testelor functionale, afisat sub buton.
+        TestReport m_lastReport;
+        bool       m_hasReport = false;
 
         // Tile spawn config
         int m_tileGridSize;

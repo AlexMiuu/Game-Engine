@@ -46,6 +46,8 @@
 #include "CombatSystem.hpp"
 #include "ResourceManager.hpp"
 #include "EditorState.hpp"
+#include "Benchmark.hpp"            // Harness de performanta (capitolul 6)
+#include "SelfTest.hpp"            // Teste functionale (tabelul 6.1)
 // ===========================
 // WINDOW SETTINGS
 // ===========================
@@ -208,6 +210,7 @@ gps::CombatSystem*   g_combatSystem    = nullptr;
 gps::ResourceManager& resourceManager = gps::ResourceManager::Instance();
 gps::GuiManager* g_guiManager = nullptr;
 gps::EditorState* g_editorState = nullptr;
+gps::BenchmarkHarness* g_benchmark = nullptr;
 
 // ===========================
 // PROP PLACEMENT MODE (MVP)
@@ -1892,6 +1895,17 @@ glm::vec3 screenToWorld(const glm::vec2& screenPos) {
 int main(int argc, const char* argv[]) {
     std::cout << "🎮 Starting OpenGL Project..." << std::endl;
 
+    // Rulare headless a testelor functionale (tabelul 6.1): "LAB8_PG.exe --selftest".
+    // Nu are nevoie de fereastra / OpenGL, deci ruleaza si iese inainte de init.
+    for (int i = 1; i < argc; ++i) {
+        if (std::string(argv[i]) == "--selftest") {
+            gps::TestReport report = gps::SelfTest::RunFunctionalTests();
+            gps::SelfTest::WriteReport(report);
+            std::cout << report.ToString();
+            return report.AllPassed() ? 0 : 1;
+        }
+    }
+
     // Init OpenGL
     if (!initOpenGLWindow()) {
         glfwTerminate();
@@ -1920,6 +1934,12 @@ int main(int argc, const char* argv[]) {
     g_editorState = new gps::EditorState();
     g_guiManager->BindEditorState(g_editorState);
 
+    // Benchmark harness (capitolul 6): spawneaza incarcarea de test si masoara
+    // performanta. Condus din sectiunea "Benchmark & Testare" a panoului Debug.
+    g_benchmark = new gps::BenchmarkHarness();
+    g_benchmark->Initialize(g_scene, g_sceneManager, &g_tileManager, g_selectionSystem);
+    g_guiManager->BindBenchmark(g_benchmark);
+
     // Bases + MVG enemy seed live across the match lifecycle; spawn once at
     // boot and on Reset.
     spawnBases();
@@ -1936,6 +1956,10 @@ int main(int argc, const char* argv[]) {
         glfwPollEvents();
 
         processMovement();
+
+        // Benchmark harness: conduce spawn-ul, warmup-ul si masurarea cadru cu
+        // cadru cu delta real. No-op cat timp nu ruleaza nicio masuratoare.
+        if (g_benchmark) g_benchmark->Update(deltaTime);
 
         // Update scene
         if (g_scene) {
@@ -2481,6 +2505,7 @@ int main(int argc, const char* argv[]) {
     }
 
     // Cleanup
+    delete g_benchmark;
     delete g_editorState;
     delete g_guiManager;
     delete g_scene;
