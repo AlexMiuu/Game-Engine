@@ -1,14 +1,8 @@
-﻿//
-// main.cpp - INTEGRAT CU NOILE SISTEME
-// Exemplu complet de utilizare: InputManager, Scene, SceneManager, SelectionSystem
-//
-
-#include <iostream>
+﻿#include <iostream>
 #include <cmath>
 #include <string>
 #include <algorithm>
 
-// OpenGL/GLFW/GLEW
 #if defined (__APPLE__)
 #define GLFW_INCLUDE_GLCOREARB
 #define GL_SILENCE_DEPRECATION
@@ -19,13 +13,11 @@
 
 #include <GLFW/glfw3.h>
 
-// GLM
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <glm/gtc/matrix_inverse.hpp> 
 
-// Clase existente
 #include "Shader.hpp"
 #include "Camera.hpp"
 #include "CameraIso.hpp"
@@ -34,7 +26,6 @@
 #include "RayCaster.hpp"
 #include "TileManager.hpp"
 
-// NOILE SISTEME
 #include "InputManager.hpp"           // Input centralizat
 #include "Scene.hpp"                  // Container pentru obiecte
 #include "SceneObject.hpp"            // Obiecte cu componente
@@ -46,19 +37,18 @@
 #include "CombatSystem.hpp"
 #include "ResourceManager.hpp"
 #include "EditorState.hpp"
-#include "Benchmark.hpp"            // Harness de performanta (capitolul 6)
-#include "SelfTest.hpp"            // Teste functionale (tabelul 6.1)
-// ===========================
+#include "Benchmark.hpp"           
+#include "SelfTest.hpp"           
+
+
+
 // WINDOW SETTINGS
-// ===========================
 int glWindowWidth = 1920;
 int glWindowHeight = 1080;
 int retina_width, retina_height;
 GLFWwindow* glWindow = NULL;
 
-// ===========================
 // CAMERA & VIEW
-// ===========================
 gps::Camera myCamera(
     glm::vec3(0.0f, 200, -200)
 );
@@ -93,9 +83,6 @@ constexpr float kGroundY = -60.0f;
 // uses (g_sceneManager / g_scene).
 static int SpawnCarrierAircraft(gps::SceneObject* carrier);
 
-// ===========================
-// SHADERS
-// ===========================
 gps::Shader myCustomShader;
 gps::Shader depthMapShader;
 gps::Shader skyboxShader;
@@ -127,9 +114,7 @@ GLint objectTintLoc;
 GLint objectIDLoc;
 GLint isGhostLoc;
 
-// ===========================
 // LIGHTING
-// ===========================
 glm::vec3 lightDir = glm::vec3(150.0f, 500.0f, 50.0f);
 glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);
 
@@ -150,12 +135,10 @@ GLint dirLightDirEyeLoc;
 GLint dirLightColorLoc;
 GLint viewPosEyeLoc;
 
-// ===========================
-// MODELE 3D (încărcate manual)
-// ===========================
-gps::Model3D sceneModel;      // Teren
-gps::Model3D obiecte;          // Obiecte statice
-gps::Model3D orcModel;         // Trupe
+// MODELE 3D 
+gps::Model3D sceneModel;      
+gps::Model3D obiecte;
+gps::Model3D orcModel;        
 gps::Model3D rightWingModel;
 gps::Model3D Pikeman;
 gps::Model3D waterTyle;
@@ -178,9 +161,7 @@ gps::Model3D desertTile;
 gps::Model3D greenTile;
 gps::Model3D fishBoat;
 
-// ===========================
 // SKYBOX
-// ===========================
 gps::SkyBox mySkyBox;
 std::vector<const GLchar*> faces{
     "textures/skybox/rt.tga",
@@ -191,17 +172,13 @@ std::vector<const GLchar*> faces{
     "textures/skybox/ft.tga"
 };
 
-// ===========================
 // TILE MANAGER
-// ===========================
 // Hex tile model has center-to-vertex = 5.587 in model units; tile size must equal
 // modelScale * 5.587 for hexes to pack flush. Smaller tile -> denser-feeling map.
 static int mapGroundY= -140;
 gps::TileManager g_tileManager(100.566f, glm::vec3(18.0f), mapGroundY);
 
-// ===========================
-// NOILE SISTEME (GLOBALE)
-// ===========================
+
 gps::Scene* g_scene = nullptr;
 gps::SceneManager* g_sceneManager = nullptr;
 gps::SelectionSystem* g_selectionSystem = nullptr;
@@ -212,14 +189,9 @@ gps::GuiManager* g_guiManager = nullptr;
 gps::EditorState* g_editorState = nullptr;
 gps::BenchmarkHarness* g_benchmark = nullptr;
 
-// ===========================
-// PROP PLACEMENT MODE (MVP)
-// ===========================
 int g_nextPlacedPropID = 10001;
 
-// ===========================
 // SPARK PARTICLES (damage feedback)
-// ===========================
 struct Spark {
     glm::vec3 pos;
     glm::vec3 vel;
@@ -271,13 +243,9 @@ static void ApplyDamageTo(gps::SceneObject* victim, int dmg, int attackerOwnerID
     }
 }
 
-// Forward declaration — body lives below MATCH STATE because it touches
-// g_baseP1ID / g_baseP2ID / g_matchP1Lost / g_matchP2Lost.
+
 static void CleanupKilled(const std::vector<int>& killed);
 
-// Spawn an aircraft orbiting the given carrier, inheriting the carrier's faction.
-// Used both at initial carrier placement and by the per-frame respawn loop.
-// Returns the new plane's ID, or -1 on failure.
 static int SpawnCarrierAircraft(gps::SceneObject* carrier) {
     if (!carrier || !g_sceneManager) return -1;
     glm::vec3 carrierPos = carrier->GetTransform().GetPosition();
@@ -305,9 +273,6 @@ static int SpawnCarrierAircraft(gps::SceneObject* carrier) {
     return plane->GetID();
 }
 
-// ===========================
-// MATCH STATE
-// ===========================
 // Bases use sentinel -1 (never spawned) and -2 (was spawned, has died) so we
 // can detect a fall in the same frame the SceneObject gets destroyed.
 int    g_baseP1ID        = -1;
@@ -336,21 +301,12 @@ static void CleanupKilled(const std::vector<int>& killed) {
     }
 }
 
-
-// ===========================
-// TIME
-// ===========================
 double lastFrameTime = 0.0;
 float deltaTime = 1.0f;
 
-// ===========================
-// PROJECTION
-// ===========================
 glm::mat4 projection;
 
-// ===========================
 // FUNCTION DECLARATIONS
-// ===========================
 void windowResizeCallback(GLFWwindow* window, int width, int height);
 void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mode);
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
@@ -384,10 +340,7 @@ void renderDebugBounds();
 
 glm::vec3 screenToWorld(const glm::vec2& screenPos);
 
-// ===========================
 // CALLBACKS IMPLEMENTATION
-// ===========================
-
 void windowResizeCallback(GLFWwindow* window, int width, int height) {
     glfwGetFramebufferSize(glWindow, &retina_width, &retina_height);
     glViewport(0, 0, retina_width, retina_height);
@@ -414,11 +367,6 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mode
     // Forward către InputManager
     gps::InputManager::Instance().OnKeyEvent(key, scancode, action, mode);
 
-    // Control groups (RTS-style Ctrl+N save / N recall / Shift+N append).
-    // Handled BEFORE the WantsKeyboardInput gate because ImGui's nav-keyboard
-    // flag keeps WantCaptureKeyboard sticky after any panel click — gating
-    // those keys on the full keyboard capture would permanently block them.
-    // We only suppress on WantsTextInput (actual text-field focus).
     const bool textInputActive = g_guiManager && g_guiManager->WantsTextInput();
     if (!textInputActive
         && action == GLFW_PRESS
@@ -445,14 +393,12 @@ void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mode
         return;
     }
 
-    // ESC pentru exit
     if (key == GLFW_KEY_ESCAPE && action == GLFW_PRESS) {
         glfwSetWindowShouldClose(window, GL_TRUE);
     }
 }
 
 void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
-    // Forward către InputManager
     gps::InputManager::Instance().OnMouseButton(button, action, mods);
 
     // Middle-mouse drag-to-pan camera. Always tracked (even over ImGui release),
@@ -476,7 +422,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
 
     glm::vec2 mousePos = gps::InputManager::Instance().GetMousePosition();
 
-    // ========== EDIT MODE INPUT ==========
+    //  EDIT MODE INPUT
     if (g_editorState && g_editorState->IsEditMode()) {
         if (button == GLFW_MOUSE_BUTTON_LEFT) {
             if (action == GLFW_PRESS) {
@@ -509,11 +455,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         return;
     }
 
-    // ========== PLAY MODE INPUT (existing code) ==========
-
-    // Patrol targeting: left-click marks point A, then point B. After B is set,
-    // every snapshotted unit is armed with the matching MovementData and the
-    // arrival hook re-arms each leg until cancelled.
     if (g_sceneManager->m_patrolTargeting && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         glm::vec3 clicked = screenToWorld(mousePos);
 
@@ -594,11 +535,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         return;
     }
 
-    // Bombardment ability: left-click finalizes the strike, deducts Oil, and lets
-    // CombatSystem drop one big AOE projectile from the sky on the clicked point.
-    if (g_sceneManager->m_bombardmentTargeting){
-
-    }
     if (g_sceneManager->m_bombardmentTargeting && button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         g_sceneManager->m_bombardmentTargeting = false;
         if (resourceManager.Spend("Oil", 75.0f)) {
@@ -670,9 +606,6 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
             }
             
             if (spawned) {
-                // Charge the prop's per-unit Oil + Fish price atomically. If the
-                // player can't afford BOTH, nothing is spent and we reject the
-                // placement (same pattern as the collision/tile rejections above).
                 const gps::UnitStats::PricePoints& price = spawned->unitStats.price;
                 if (!resourceManager.Spend({ {"Oil",  (float)price.oil},
                                              {"Fish", (float)price.fish} })) {
@@ -699,7 +632,7 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         return;
     }
 
-    // LEFT MOUSE - Selection
+    //Selection
     if (button == GLFW_MOUSE_BUTTON_LEFT) {
         if (action == GLFW_PRESS) {
 
@@ -744,13 +677,13 @@ void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods) {
         }
     }
 
-    // RIGHT MOUSE - Cancel placement mode
+    // Cancel placement mode
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS && g_sceneManager->m_propPlacementMode) {
         g_sceneManager->CancelPropPlacement();
         return;
     }
 
-    // RIGHT MOUSE - Movement Command
+    //Movement Command
     if (button == GLFW_MOUSE_BUTTON_RIGHT && action == GLFW_PRESS) {
         glm::vec3 worldPos = screenToWorld(mousePos);
 
@@ -866,40 +799,15 @@ void scrollCallback(GLFWwindow* window, double xoffset, double yoffset) {
     targetZoomFactor = glm::clamp(targetZoomFactor, 0.5f, maxZ);
 }
 
-//
 // GUI INIT
-//
-
 void initGui() {
     g_guiManager = new gps::GuiManager();
     g_guiManager->Initialize(glWindow, "#version 410");
-
-    // Conecteaza sistemele existente
     g_guiManager->BindSystems(g_scene, g_sceneManager, g_selectionSystem, &g_tileManager);
-
-    // ─── Adauga butoane custom (optional) ───
-
-
- 
-    /*
-    // Buton: Toggle Spawn
-    gps::GuiButton toggleSpawnBtn;
-    toggleSpawnBtn.label = "🔄 Toggle Spawn";
-    toggleSpawnBtn.tooltip = "Activeaza/dezactiveaza spawn-ul";
-    toggleSpawnBtn.callback = [&]() {
-        bool current = g_sceneManager->IsSpawnEnabled();
-        g_sceneManager->SetSpawnEnabled(!current);
-        std::cout << "Spawn " << (!current ? "ENABLED" : "DISABLED") << std::endl;
-        };
-    g_guiManager->AddButton(toggleSpawnBtn);
-    */
-    std::cout << "✅ GUI initialized" << std::endl;
+    std::cout << "GUI initialized" << std::endl;
 }
 
-// ===========================
 // INITIALIZATION
-// ===========================
-
 bool initOpenGLWindow() {
     if (!glfwInit()) {
         std::cerr << "ERROR: could not start GLFW3" << std::endl;
@@ -977,7 +885,7 @@ void initShadowFrameBuffer() {
 }
 
 void initModels() {
-    std::cout << "📦 Loading models..." << std::endl;
+    std::cout << "Loading models" << std::endl;
 
     sceneModel.LoadModel("objects/teren/teren.obj", "textures/");
     obiecte.LoadModel("objects/restobiecte/restobiecte.obj", "textures/");
@@ -1002,7 +910,7 @@ void initModels() {
     greenTile.LoadModel("objects/tiles/greenTile.obj", "textures/");
     fishBoat.LoadModel("objects/tiles/fishBoat.obj", "textures/");
 
-    std::cout << "✅ Models loaded" << std::endl;
+    std::cout << "Models loaded" << std::endl;
 }
 
 void initShaders() {
@@ -1032,7 +940,7 @@ void initUniforms() {
     objectIDLoc = glGetUniformLocation(myCustomShader.shaderProgram, "objectID");
     isGhostLoc = glGetUniformLocation(myCustomShader.shaderProgram, "isGhost");
 
-// Set light direction
+  // Set light direction
   //  glUniform3fv(lightDirLoc, 1, glm::value_ptr(lightDir));
 
     // Set view
@@ -1078,12 +986,6 @@ void initSkyBox() {
     mySkyBox.Load(faces);
 }
 
-/*
-void initTileManager() {
-    g_tileManager.init(100, 10.0f, glm::vec3(0.0f, -60.0f, 0.0f));
-    std::cout << "✅ TileManager initialized" << std::endl;
-}
-*/
 void initSceneManager() {
     // 1. Creeaza scena
     g_scene = new gps::Scene("MainScene");
@@ -1127,7 +1029,7 @@ void initSceneManager() {
     // 5. Enable spawn
     g_sceneManager->SetSpawnEnabled(true);
 
-    std::cout << "✅ SceneManager initialized with "
+    std::cout << "SceneManager initialized with "
         << g_scene->GetObjectCount() << " objects" << std::endl;
 }
 
@@ -1157,7 +1059,6 @@ void spawnBases() {
 
 // MVG seed: at match start the enemy (faction 2) corner already has economy,
 // defense, and an active fleet so the demo shows a real fight from frame 1.
-// Combat is gated by kMatchGraceSec so the player gets a moment to react.
 static gps::SceneObject* SpawnEnemyUnit(const std::string& name, const std::string& tag,
                                        const std::string& model, const glm::vec3& pos, float scale) {
     gps::SceneObject* obj = g_sceneManager->SpawnObject(name, tag, model, pos, glm::vec3(scale));
@@ -1285,12 +1186,7 @@ void initCombatSystem() {
     std::cout << " CombatSystem initialized" << std::endl;
 }
 
-
-
-// ===========================
 // RANGE CIRCLE
-// ===========================
-
 void initRangeCircle() {
     const int N = 64;
     std::vector<glm::vec3> verts;
@@ -1316,7 +1212,7 @@ void initRangeCircle() {
     circleProjLoc  = glGetUniformLocation(rangeCircleShader.shaderProgram, "projection");
     circleColorLoc = glGetUniformLocation(rangeCircleShader.shaderProgram, "circleColor");
 
-    std::cout << "✅ Range circle initialized" << std::endl;
+    std::cout << "Range circle initialized" << std::endl;
 }
 
 void renderRangeCircles() {
@@ -1510,16 +1406,11 @@ void renderDebugBounds() {
     glDisable(GL_BLEND);
 }
 
-// ===========================
 // GAME LOOP
-// ===========================
-
 void processMovement() {
     auto& input = gps::InputManager::Instance();
     const bool wantsKbd   = g_guiManager && g_guiManager->WantsKeyboardInput();
     const bool wantsMouse = g_guiManager && g_guiManager->WantsMouseInput();
-
-    // ---- Mouse-driven camera (runs regardless of keyboard focus / pause) ----
 
     // Edge-of-screen pan
     if (!wantsMouse) {
@@ -1592,7 +1483,7 @@ void processMovement() {
         }
     }
 
-    // ---- Keyboard input (suppressed while ImGui has keyboard focus) ----
+    // Keyboard input (suppressed while ImGui has keyboard focus)
     if (wantsKbd) return;
 
     bool wasdHeld = false;
@@ -1756,16 +1647,13 @@ void renderScene(gps::Shader shader) {
 
         if (!obj->GetModel() || !obj->IsActive()) continue;
 
-        // Model matrix
         glm::mat4 modelMatrix = obj->GetTransform().GetModelMatrix();
         glUniformMatrix4fv(modelLoc, 1, GL_FALSE, glm::value_ptr(modelMatrix));
 
-        // Normal matrix
         glm::mat3 normalMatrix = glm::mat3(glm::transpose(glm::inverse(view * modelMatrix)));
         glUniformMatrix3fv(normalMatrixLoc, 1, GL_FALSE, glm::value_ptr(normalMatrix));
 
         // Highlight dacă e selectat
-
         glUniform1i(objectIDLoc, obj->GetID());
 
         if (isSelectedLoc != -1 && highlightColorLoc != -1) {
@@ -1869,8 +1757,6 @@ glm::vec3 screenToWorld(const glm::vec2& screenPos) {
         nearPointWorld /= nearPointWorld.w;
     }
 
-    // For orthographic projection, all rays travel parallel to the camera's
-    // forward direction. We use the camera's front direction directly.
     glm::vec3 rayDirection = myCamera.getCameraFrontDirection();
 
     // Find where this ray intersects the gameplay ground plane (y = kGroundY).
@@ -1880,22 +1766,13 @@ glm::vec3 screenToWorld(const glm::vec2& screenPos) {
 
     // Calculate the final intersection point
     glm::vec3 intersectionPoint = glm::vec3(nearPointWorld) + t * rayDirection;
-
-    // Optional: Clamp to map boundaries
-    // intersectionPoint.x = glm::clamp(intersectionPoint.x, MAP_MIN_X, MAP_MAX_X);
-    // intersectionPoint.z = glm::clamp(intersectionPoint.z, MAP_MIN_Z, MAP_MAX_Z);
-
     return intersectionPoint;
 }
 
-// ===========================
-// MAIN
-// ===========================
-
 int main(int argc, const char* argv[]) {
-    std::cout << "🎮 Starting OpenGL Project..." << std::endl;
+    std::cout << "Starting GAME ENGINE" << std::endl;
 
-    // Rulare headless a testelor functionale (tabelul 6.1): "LAB8_PG.exe --selftest".
+    // Rulare headless a testelor functionale "LAB8_PG.exe --selftest".
     // Nu are nevoie de fereastra / OpenGL, deci ruleaza si iese inainte de init.
     for (int i = 1; i < argc; ++i) {
         if (std::string(argv[i]) == "--selftest") {
@@ -1924,7 +1801,6 @@ int main(int argc, const char* argv[]) {
     initSkyBox();
    // initTileManager();
 
-    // Init NEW SYSTEMS
     initSceneManager();
     initSelectionSystem();
     initCollisionSystem();
@@ -1952,13 +1828,9 @@ int main(int argc, const char* argv[]) {
         // Update
         gps::InputManager::Instance().Update();
         updateDeltaTime();
-
         glfwPollEvents();
-
         processMovement();
 
-        // Benchmark harness: conduce spawn-ul, warmup-ul si masurarea cadru cu
-        // cadru cu delta real. No-op cat timp nu ruleaza nicio masuratoare.
         if (g_benchmark) g_benchmark->Update(deltaTime);
 
         // Update scene
@@ -1966,12 +1838,9 @@ int main(int argc, const char* argv[]) {
             g_scene->Update(deltaTime);
         }
 
-        // ========== PLAY MODE ONLY SYSTEMS ==========
-        // Skipped while paused so combat/movement/production all freeze.
         const bool paused = g_guiManager && g_guiManager->IsPaused();
         if (!paused && (!g_editorState || g_editorState->IsPlayMode())) {
 
-        // Resource production (with tile bonus when extractor is parked on a matching tile)
         if (g_scene) {
             for (auto* obj : g_scene->GetObjectsRaw()) {
                 if (!obj->IsActive()) continue;
@@ -2002,15 +1871,11 @@ int main(int argc, const char* argv[]) {
             g_matchStartTime   = glfwGetTime();
         }
 
-        // Combat update — frozen until the user starts the match, frozen
-        // during the post-start grace window, and frozen again the moment one
-        // of the bases falls so dead units don't post-mortem-kill the army.
         const bool inGrace = g_matchActive
                             && (glfwGetTime() - g_matchStartTime) < kMatchGraceSec;
         if (g_combatSystem && g_matchActive && !inGrace) {
             g_combatSystem->Update(deltaTime);
             for (int deadID : g_combatSystem->GetDeadIDs()) {
-                // Capture faction + base-fall BEFORE the SceneObject is gone.
                 if (gps::SceneObject* o = g_scene ? g_scene->GetObjectByID(deadID) : nullptr) {
                     if      (o->unitStats.faction == 1) g_matchP1Lost++;
                     else if (o->unitStats.faction == 2) g_matchP2Lost++;
@@ -2128,7 +1993,6 @@ int main(int argc, const char* argv[]) {
 
                 obj->orbitData.orbitAngle += obj->orbitData.orbitSpeed * deltaTime;
 
-                // Circle equation: P = Center + R * (cos(a), 0, sin(a))
                 float a = obj->orbitData.orbitAngle;
                 float r = obj->orbitData.orbitRadius;
                 glm::vec3 center = parent->GetTransform().GetPosition();
@@ -2400,15 +2264,12 @@ int main(int argc, const char* argv[]) {
     glUniformMatrix4fv(viewLoc, 1, GL_FALSE, glm::value_ptr(view));
     glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, glm::value_ptr(projection));
 
-    // ✅ UPDATE point light în eye space
     glm::vec3 pointLightPosEye = glm::vec3(view * glm::vec4(lightDir, 1.0f));
     glUniform3fv(lightPosEyeLoc, 1, glm::value_ptr(pointLightPosEye));
 
-    // ✅ UPDATE directional light în eye space
     glm::vec3 dirLightEye = glm::inverseTranspose(glm::mat3(view)) * dirLightWorld;
     glUniform3fv(dirLightDirEyeLoc, 1, glm::value_ptr(dirLightEye));
 
-    // ✅ UPDATE camera position în eye space
     glm::mat4 invView = glm::inverse(view);
     glm::vec3 cameraPosWorld = glm::vec3(invView[3]);
     glm::vec3 cameraPosEye = glm::vec3(view * glm::vec4(cameraPosWorld, 1.0f));
@@ -2516,8 +2377,5 @@ int main(int argc, const char* argv[]) {
 
     glfwDestroyWindow(glWindow);
     glfwTerminate();
-
-    std::cout << "👋 Goodbye!" << std::endl;
-
     return 0;
 }

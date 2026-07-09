@@ -1,9 +1,4 @@
-﻿//
-// TileManager.cpp
-// Implementarea TileManager REFACTORIZAT pentru noul SceneObject system
-//
-
-#include "TileManager.hpp"
+﻿#include "TileManager.hpp"
 #include "Scene.hpp"
 #include "SceneObject.hpp"
 #include "Model3D.hpp"

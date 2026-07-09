@@ -1,6 +1,6 @@
 //
 // Benchmark.cpp
-// Implementarea harness-ului de masurare a performantei (capitolul 6).
+// Implementarea harness-ului de masurare a performantei.
 //
 
 #include "Benchmark.hpp"
@@ -62,10 +62,6 @@ namespace gps {
     void BenchmarkHarness::ApplyVSync(bool enabled) {
         glfwSwapInterval(enabled ? 1 : 0);
     }
-
-    // ---------------------------------------------------------------------
-    // Pornirea rularilor
-    // ---------------------------------------------------------------------
 
     void BenchmarkHarness::StartSweep(const std::vector<int>& counts) {
         if (!m_scene || !m_sceneManager) {
@@ -228,9 +224,6 @@ namespace gps {
         }
     }
 
-    // ---------------------------------------------------------------------
-    // Bucla de masurare
-    // ---------------------------------------------------------------------
 
     void BenchmarkHarness::Update(float deltaTime) {
         if (m_mode == Mode::None) return;
@@ -389,4 +382,4 @@ namespace gps {
         return std::min(1.0f, within);
     }
 
-} // namespace gps
+}

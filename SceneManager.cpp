@@ -1,8 +1,3 @@
-//
-// SceneManager.cpp
-// Implementarea SceneManager
-//
-
 #include "SceneManager.hpp"
 #include <iostream>
 #include <cmath>
@@ -15,8 +10,8 @@ namespace gps {
     SceneManager::SceneManager()
         : m_scene(nullptr)
         , m_tileManager(nullptr)
-        , m_nextTroopID(100)  // �ncepe de la 100 pentru trupe
-        , m_nextObjectID(1)   // �ncepe de la 1 pentru obiecte generale
+        , m_nextTroopID(100)
+        , m_nextObjectID(1)
         , m_spawnEnabled(true)
         , m_troopSpawnPos(100.0f, -60.0f, -90.0f)
         , m_troopCount(0)
@@ -30,83 +25,57 @@ namespace gps {
     }
 
     SceneManager::~SceneManager() {
-        // Scene-ul e gestionat extern, nu �l ?tergem aici
     }
-
-    // ===========================
-    // INITIALIZATION
-    // ===========================
 
     void SceneManager::Initialize(Scene* scene, TileManager* tileManager) {
         m_scene = scene;
         m_tileManager = tileManager;
 
-        std::cout << "? SceneManager initialized" << std::endl;
+        std::cout << "SceneManager initialized" << std::endl;
     }
 
     void SceneManager::LoadModels() {
-        // Aceast� metod� poate fi extins� pentru a �nc�rca modele
-        // Pentru moment, presupunem c� modelele sunt �nc�rcate extern
-        // ?i �nregistrate cu RegisterModel()
-
-        std::cout << "?? Models loaded (external)" << std::endl;
+        std::cout << "Models loaded (external)" << std::endl;
     }
 
     void SceneManager::SetupScene() {
         if (!m_scene) {
-            std::cerr << "? Scene is null! Cannot setup." << std::endl;
+            std::cerr << "SceneManager: Scene is null! Cannot setup." << std::endl;
             return;
         }
 
-        std::cout << "?? Setting up scene..." << std::endl;
+        std::cout << "SceneManager: Setting up scene..." << std::endl;        
 
-        // Creeaz� componentele scenei
-       // CreateTerrain();
-       // CreateStaticObjects();
-        // CreateRandomObstacles disabled — the islandT props it scattered were
-        // visual noise (small floating objects with health bars) and got in the
-        // way of unit placement.
-        CreateInitialTroops(5);
-        
-
-        std::cout << "? Scene setup complete! Objects in scene: "
+        std::cout << "SceneManager: Scene setup complete! Objects in scene: "
             << m_scene->GetObjectCount() << std::endl;
     }
 
-    // ===========================
-    // SPAWN SYSTEM
-    // ===========================
 
     SceneObject* SceneManager::SpawnTroop(const glm::vec3& position, const std::string& modelName) {
         if (!m_scene) {
-            std::cerr << "? Cannot spawn troop: scene is null" << std::endl;
+            std::cerr << "SceneManager: Cannot spawn troop: scene is null" << std::endl;
             return nullptr;
         }
 
         if (!m_spawnEnabled) {
-            std::cout << "?? Spawn is disabled" << std::endl;
+            std::cout << "SceneManager: Spawn is disabled" << std::endl;
             return nullptr;
         }
 
-        // G�se?te modelul
         Model3D* model = GetModel(modelName);
         if (!model) {
-            std::cerr << "? Model '" << modelName << "' not found!" << std::endl;
+            std::cerr << "Model '" << modelName << "' not found!" << std::endl;
             return nullptr;
         }
 
-        // Creeaz� obiectul
         int troopID = GetNextTroopID();
         SceneObject* troop = m_scene->CreateObject("Troop_" + std::to_string(troopID));
 
-        // Configureaz� transform
         troop->GetTransform().SetPosition(position);
         troop->GetTransform().SetScale(glm::vec3(1,1,1));
 
-        // Seteaz� modelul
         troop->SetModel(model);
 
-        // Calculeaz� bounding sphere
         ComputeAndSetBoundingSphere(troop, model);
 
         UnitStats objectStats = InitializeUnitsStats(troop);
@@ -114,11 +83,9 @@ namespace gps {
 
         // Set collision radius
         troop->SetCollisionRadius(25.0f);
-
-        // Incrementeaz� counter
         m_troopCount++;
 
-        std::cout << "??? Spawned troop " << troopID << " at position ("
+        std::cout << "SceneManager: Spawned troop " << troopID << " at position ("
             << position.x << ", " << position.y << ", " << position.z << ")" << std::endl;
 
         return troop;
@@ -152,7 +119,7 @@ namespace gps {
             }
         }
 
-        std::cout << "??? Spawned formation of " << troops.size() << " troops" << std::endl;
+        std::cout << "SceneManager: Spawned formation of " << troops.size() << " troops" << std::endl;
 
         return troops;
     }
@@ -164,7 +131,7 @@ namespace gps {
         m_propPlacementLabel = label;
         m_propPlacementMode = true;
         m_propPlacementFaction = faction;
-        std::cout << "?? Prop placement mode enabled for model '" << modelName
+        std::cout << "Prop placement mode enabled for model '" << modelName
                   << "' (faction " << faction << ")" << std::endl;
 
     }
@@ -176,13 +143,13 @@ namespace gps {
         const glm::vec3& scale)
     {
         if (!m_scene) {
-            std::cerr << "? Cannot spawn object: scene is null" << std::endl;
+            std::cerr << "Cannot spawn object: scene is null" << std::endl;
             return nullptr;
         }
 
         Model3D* model = GetModel(modelName);
         if (!model) {
-            std::cerr << "? Model '" << modelName << "' not found!" << std::endl;
+            std::cerr << "Model '" << modelName << "' not found!" << std::endl;
             return nullptr;
         }
 
@@ -201,21 +168,17 @@ namespace gps {
         obj->SetCollisionRadius(25.0f);
 
 
-        std::cout << "?? Spawned object '" << name << "' (ID: " << obj->GetID() << ")" << std::endl;
+        std::cout << "SceneManager: Spawned object '" << name << "' (ID: " << obj->GetID() << ")" << std::endl;
 
         return obj;
     }
 
-    // ===========================
-    // SCENE SETUP COMPONENTS
-    // ===========================
-
     void SceneManager::CreateTerrain() {
-        std::cout << "??? Creating terrain..." << std::endl;
+        std::cout << "SceneManager: Creating terrain..." << std::endl;
 
         Model3D* terrainModel = GetModel("terrain");
         if (!terrainModel) {
-            std::cout << "?? Terrain model not found, skipping" << std::endl;
+            std::cout << "SceneManager: Terrain model not found, skipping" << std::endl;
             return;
         }
 
@@ -225,15 +188,15 @@ namespace gps {
 
         ComputeAndSetBoundingSphere(terrain, terrainModel);
 
-        std::cout << "? Terrain created" << std::endl;
+        std::cout << "SceneManager: Terrain created" << std::endl;
     }
 
     void SceneManager::CreateStaticObjects() {
-        std::cout << "??? Creating static objects..." << std::endl;
+        std::cout << "SceneManager: Creating static objects..." << std::endl;
 
         Model3D* objectsModel = GetModel("objects");
         if (!objectsModel) {
-            std::cout << "?? Objects model not found, skipping" << std::endl;
+            std::cout << "SceneManager: Objects model not found, skipping" << std::endl;
             return;
         }
 
@@ -243,19 +206,18 @@ namespace gps {
 
         ComputeAndSetBoundingSphere(objects, objectsModel);
 
-        std::cout << "? Static objects created" << std::endl;
+        std::cout << "SceneManager: Static objects created" << std::endl;
     }
 
     void SceneManager::CreateInitialTroops(int count) {
-        std::cout << "??? Creating initial troops (" << count << ")..." << std::endl;
+        std::cout << "SceneManager: Creating initial troops (" << count << ")..." << std::endl;
 
         Model3D* orcModel = GetModel("ship");
         if (!orcModel) {
-            std::cout << "?? Orc model not found, skipping troops" << std::endl;
+            std::cout << "SceneManager: Orc model not found, skipping troops" << std::endl;
             return;
         }
 
-        // Spawn �n forma?ie la pozi?ia ini?ial�
         float spacing = 15.0f;
         int columns = static_cast<int>(std::ceil(std::sqrt(static_cast<float>(count))));
 
@@ -284,13 +246,13 @@ namespace gps {
             m_troopCount++;
         }
 
-        std::cout << "? Created " << count << " initial troops" << std::endl;
+        std::cout << "SceneManager: Created " << count << " initial troops" << std::endl;
     }
 
     void SceneManager::CancelPropPlacement() {
         if (!m_propPlacementMode) return;
         m_propPlacementMode = false;
-        std::cout << "Placement cancelled" << std::endl;
+        std::cout << "SceneManager: Placement cancelled" << std::endl;
     }
 
     // ===========================
@@ -299,12 +261,12 @@ namespace gps {
 
     void SceneManager::RegisterModel(const std::string& name, Model3D* model) {
         if (!model) {
-            std::cerr << "? Cannot register null model: " << name << std::endl;
+            std::cerr << "SceneManager: Cannot register null model: " << name << std::endl;
             return;
         }
 
         m_models[name] = model;
-        std::cout << "?? Registered model: " << name << std::endl;
+        std::cout << "SceneManager: Registered model: " << name << std::endl;
     }
 
     Model3D* SceneManager::GetModel(const std::string& name) {
@@ -314,10 +276,6 @@ namespace gps {
         }
         return nullptr;
     }
-
-    // ===========================
-    // BOUNDING SPHERE HELPERS
-    // ===========================
 
     void SceneManager::ComputeAndSetBoundingSphere(SceneObject* obj, Model3D* model) {
         if (!obj || !model) return;
@@ -418,16 +376,6 @@ namespace gps {
         // Placement cost comes from the shared price table (single source of
         // truth shared with the spawn-panel GUI).
         stats.price = GetPropPrice(tag);
-
-        // ─── BALANCE MODEL ──────────────────────────────────────────────────
-        // DPS = attack / baseAttackCooldown (default cooldown = 1.0s).
-        // Roles are kept distinct by trading range vs HP vs DPS rather than
-        // letting one stat dominate (e.g. the old turret's 300 DPS).
-        //   ship      light skirmisher   HP 120  DPS 18  range  90
-        //   frigate   ranged backbone    HP 260  DPS 30  range 120
-        //   destroyer heavy AOE          HP 600  DPS 30  range  80  (splash)
-        //   aircraft  carrier air strike HP  80  DPS 45  range  70  (splash)
-        //   turret    point defence      HP 150  DPS 50  range  90  (rapid)
         if (tag == "ship")
         {
             stats.health = 120;
@@ -442,9 +390,6 @@ namespace gps {
         }
         else if (tag == "enemyShip")
         {
-            // Legacy mirror of "ship" for faction 2 (enemy ships actually spawn
-            // with the "ship" tag today; kept consistent so it isn't a downgrade
-            // if re-used).
             stats.health = 120;
             stats.attack = 18;
             stats.maxHealth = 120;
@@ -494,8 +439,7 @@ namespace gps {
 		}
         else if (tag == "destroyer")
         {
-            // Heavy bruiser: most HP of the mobile line and the only splashing
-            // ship, but slow cadence (2s) and short range so it must close in.
+
             stats.health = 600;
             stats.attack = 60;
             stats.maxHealth = 600;
@@ -510,9 +454,6 @@ namespace gps {
         }
         else if(tag =="aircraftCarrier")
         {
-            // Capital ship: no gun of its own (attack 0); its damage comes from
-            // the orbiting aircraft it deploys. Big HP pool, the attackRange
-            // doubles as the plane's orbit radius (SpawnCarrierAircraft).
             stats.health = 1200;
             stats.attack = 0;
             stats.maxHealth = 1200;
@@ -524,10 +465,6 @@ namespace gps {
         }
         else if (tag == "aircraft")
         {
-            // Carrier strike plane: fragile, can't be controlled (orbits its
-            // parent), but hits hard. Fires a tinted air-to-ground projectile so
-            // the attack is *visible* — reuses the same SpawnCannonBall path as
-            // ships/turrets instead of dealing silent melee damage.
             stats.health = 80;
             stats.attack = 45;
             stats.maxHealth = 80;
@@ -541,8 +478,6 @@ namespace gps {
         }
         else if (tag == "turret")
         {
-            // CIWS point-defence: rapid tracers, but DPS tamed from the old 300
-            // (15 dmg @ 0.05s) to 50 so it deters rushes without hard-walling.
             stats.health = 350;
             stats.attack = 5;
             stats.maxHealth = 350;
@@ -556,9 +491,6 @@ namespace gps {
         }
         else if (tag == "mine")
         {
-            // Stationary contact mine: low HP (easy to snipe with ranged units),
-            // no attack stat — damage is applied by the per-frame mine loop in
-            // main.cpp when an enemy movable unit enters detonation range.
             stats.health       = 1000;
             stats.maxHealth    = 1000;
             stats.attack       = 0;
@@ -568,7 +500,6 @@ namespace gps {
             stats.isAlive      = true;
             stats.isMovable    = false;
             // faction is overridden by m_propPlacementFaction in main.cpp's
-            // placement handler, same as every other placeable.
         }
         else if (tag == "baseP1" || tag == "baseP2")
         {
@@ -585,4 +516,4 @@ namespace gps {
         return stats;
 	}
 
-} // namespace gps
+}

@@ -49,7 +49,7 @@ namespace gps {
     )
     {
         glm::vec3 oc = ray.origin - center;
-        float a = glm::dot(ray.direction, ray.direction);  // ~1 if normalized
+        float a = glm::dot(ray.direction, ray.direction);
         float b = 2.0f * glm::dot(oc, ray.direction);
         float c = glm::dot(oc, oc) - radius * radius;
         float discriminant = b * b - 4.0f * a * c;
@@ -70,9 +70,7 @@ namespace gps {
         outDistance = t;
         return true;
     }
-    // --------------------------------------------------------------
-    // NEW FUNCTION #1: Ray-Triangle intersection (Möller–Trumbore)
-    // --------------------------------------------------------------
+    // Ray-Triangle intersection (MollerTrumbore)
     bool RayIntersectsTriangle(
         const Ray& ray,
         const glm::vec3& v0,
@@ -110,10 +108,7 @@ namespace gps {
         return false;
     }
 
-    // --------------------------------------------------------------
-    // NEW FUNCTION #2: Ray-Model intersection in WORLD SPACE
-    // (We transform each local triangle by modelMatrix.)
-    // --------------------------------------------------------------
+    // Ray-Model intersection in WORLD SPACE
     bool RayIntersectsModelWithMatrix(
         const Ray& ray,
         const gps::Model3D& model,
@@ -124,16 +119,12 @@ namespace gps {
     {
         float closestT = FLT_MAX;
         bool  hitAny = false;
-
-        // 1) Access submeshes. (Requires Model3D::getMeshes() to be public.)
         const auto& meshList = model.getMeshes();
 
-        // 2) Loop over each mesh
         for (auto& mesh : meshList) {
             const auto& verts = mesh.vertices;
             const auto& indices = mesh.indices;
 
-            // 3) For each triangle in the index buffer
             for (size_t i = 0; i + 2 < indices.size(); i += 3) {
                 glm::vec3 v0 = verts[indices[i + 0]].Position;
                 glm::vec3 v1 = verts[indices[i + 1]].Position;
@@ -150,7 +141,6 @@ namespace gps {
                     glm::vec3(wv0), glm::vec3(wv1), glm::vec3(wv2),
                     t))
                 {
-                    // keep the closest positive intersection
                     if (t < closestT && t > 0.0f) {
                         closestT = t;
                         hitAny = true;

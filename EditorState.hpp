@@ -38,4 +38,4 @@ namespace gps {
         glm::vec3 m_dragOffset;
     };
 
-} // namespace gps
+} 

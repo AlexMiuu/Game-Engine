@@ -552,7 +552,7 @@ namespace gps {
             });
         }
 
-        // ─── Tile type (single or bulk; same combo, applied to every selected tile) ───
+        // Tile type (single or bulk, same combo, applied to every selected tile)
         if (m_tileManager) {
             std::vector<int> tileIDs;
             for (int id : selectedIDs) {
@@ -581,7 +581,6 @@ namespace gps {
             }
         }
 
-        // ─── Quick stats footer for multi-select (faction counts, etc.) ───
         if (selCount > 1) {
             ImGui::Spacing();
             ImGui::SeparatorText("Selection");
@@ -690,7 +689,7 @@ namespace gps {
             ImGui::PopID();
         }
 
-        // ─── MAP / TILE GRID (collapsed by default; advanced controls) ───
+        // MAP / TILE GRID (collapsed by default; advanced controls)
         if (m_tileManager && ImGui::CollapsingHeader("Map / Tile Grid")) {
             ImGui::PushID("mapGrid");
             ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.8f, 1.0f),
@@ -747,7 +746,7 @@ namespace gps {
             ImGui::PopID();
         }
 
-        // ─── CUSTOM BUTTONS ───
+        // CUSTOM BUTTONS
         if (!m_buttons.empty()) {
             ImGui::SeparatorText("Custom");
             for (auto& btn : m_buttons) {
@@ -1082,8 +1081,6 @@ namespace gps {
     // ===========================
 
     void GuiManager::RenderDebugPanel() {
-        // Default to bottom-left so it doesn't fight SpawnPanel (top-left),
-        // CommandPanel (bottom-right) or the Minimap (top-right).
         ImGuiViewport* vp = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(
             ImVec2(vp->WorkPos.x + 10,
@@ -1228,7 +1225,7 @@ namespace gps {
     }
 
     // ===========================
-    // BENCHMARK & TESTING (capitolul 6)
+    // BENCHMARK & TESTING
     // ===========================
     void GuiManager::RenderBenchmarkSection() {
         if (!ImGui::CollapsingHeader("Benchmark & Testare")) return;
@@ -1822,4 +1819,4 @@ namespace gps {
         }
     }
 
-} // namespace gps
+}

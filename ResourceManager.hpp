@@ -36,14 +36,10 @@ namespace gps {
             return true;
         }
 
-        // Spend several resources at once. Atomic: only deducts if EVERY pool
-        // can cover its share, otherwise nothing is spent and it returns false.
-        // Doubles as the affordability check for multi-cost purchases.
-        // Usage: Spend({ {"Oil", 10.0f}, {"Fish", 20.0f} });
         bool Spend(std::initializer_list<std::pair<std::string, float>> costs) {
-            for (const auto& c : costs)            // verify affordability first
+            for (const auto& c : costs)           
                 if (Get(c.first) < c.second) return false;
-            for (const auto& c : costs)            // then deduct (atomic)
+            for (const auto& c : costs)
                 m_pools[c.first] -= c.second;
             return true;
         }
@@ -69,6 +65,6 @@ namespace gps {
         std::unordered_map<std::string, float> m_pools;
     };
 
-} // namespace gps
+}
 
-#endif // RESOURCE_MANAGER_HPP
+#endif

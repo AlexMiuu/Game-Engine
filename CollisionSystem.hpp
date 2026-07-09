@@ -45,6 +45,6 @@ namespace gps {
         bool SpheresOverlap(const SceneObject& a, const SceneObject& b) const;
     };
 
-} // namespace gps
+}
 
-#endif // COLLISION_SYSTEM_HPP
+#endif

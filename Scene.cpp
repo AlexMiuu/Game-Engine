@@ -19,20 +19,13 @@ namespace gps {
         Clear();
     }
 
-    // ===========================
-    // OBJECT MANAGEMENT
-    // ===========================
-
     SceneObject* Scene::CreateObject(const std::string& name) {
         int id = m_nextID++;
 
         auto obj = std::make_unique<SceneObject>(id, name);
         SceneObject* ptr = obj.get();
 
-        // Salveazã în map pentru quick lookup
         m_objectsByID[id] = ptr;
-
-        // Salveazã ownership
         m_objects.push_back(std::move(obj));
 
         return ptr;
@@ -48,10 +41,8 @@ namespace gps {
     void Scene::DestroyObject(SceneObject* obj) {
         if (!obj) return;
 
-        // ?terge din map
         m_objectsByID.erase(obj->GetID());
 
-        // ?terge din vector
         m_objects.erase(
             std::remove_if(m_objects.begin(), m_objects.end(),
                 [obj](const std::unique_ptr<SceneObject>& o) {
@@ -66,10 +57,6 @@ namespace gps {
         m_objectsByID.clear();
         m_nextID = 1;
     }
-
-    // ===========================
-    // OBJECT QUERIES
-    // ===========================
 
     SceneObject* Scene::GetObjectByID(int id) {
         auto it = m_objectsByID.find(id);
@@ -107,10 +94,6 @@ namespace gps {
         return result;
     }
 
-    // ===========================
-    // LIFECYCLE
-    // ===========================
-
     void Scene::Update(float deltaTime) {
         // Update toate obiectele active
         for (auto& obj : m_objects) {
@@ -120,4 +103,4 @@ namespace gps {
         }
     }
 
-} // namespace gps
+}

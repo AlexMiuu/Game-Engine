@@ -2,24 +2,21 @@
 
 namespace gps {
 
-    // Constructor: Sets initial position for isometric view
+    // Constructorul
     Camera::Camera(glm::vec3 cameraPosition)
         : cameraPosition(cameraPosition) {
-        // Initialize camera vectors for RTS-style view
         cameraTarget = glm::vec3(0.0f, 0.0f, 0.0f);
         cameraUpDirection = glm::vec3(0.0f, 1.0f, 0.0f);
         cameraFrontDirection = glm::normalize(cameraTarget - cameraPosition);
         cameraRightDirection = glm::normalize(glm::cross(cameraFrontDirection, cameraUpDirection));
     }
 
-    // Return the isometric view matrix.
-    // The 45 deg elevation tilt comes from the camera's initial position
-    // (typically (0, 200, -200) looking at the origin), not from any post-rotation.
-    glm::mat4 Camera::getViewMatrix()  const {
+    // Matricea de vizualizare pentru camera izometrica
+    glm::mat4 Camera::getViewMatrix() const {
         return glm::lookAt(cameraPosition, cameraTarget, cameraUpDirection);
     }
 
-    // Return the orthographic projection matrix
+    // Matricea de proiectie ortografica
     glm::mat4 Camera::getProjectionMatrix(float left, float right, float bottom, float top, float near, float far) {
         return glm::ortho(left, right, bottom, top, near, far);
     }

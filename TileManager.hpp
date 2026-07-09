@@ -1,15 +1,4 @@
-﻿//
-// TileManager.hpp
-// Manager de tile-uri REFACTORIZAT pentru noul SceneObject system
-//
-// SCHIMBARI vs. versiunea veche:
-//   - Eliminat LegacySceneObject complet
-//   - Foloseste Scene::CreateObject() / Scene::DestroyObject()
-//   - Tile-urile sunt acum SceneObject-uri reale in scena
-//   - Compatibil cu SelectionSystem, rendering pipeline, etc.
-//
-
-#ifndef TILE_MANAGER_HPP
+﻿#ifndef TILE_MANAGER_HPP
 #define TILE_MANAGER_HPP
 
 #include <glm/glm.hpp>
@@ -19,7 +8,6 @@
 #include <vector>
 #include <string>
 
-// Forward declarations (evitam dependinte circulare)
 namespace gps {
     class Model3D;
     class Scene;
@@ -28,9 +16,6 @@ namespace gps {
 
 namespace gps {
 
-    // ===========================
-    // TILE TYPES + EFFECTS
-    // ===========================
     enum class TileType {
         Sea = 0,    // default, no gimmick
         Oil,        // boosts Oil extractors parked on top
@@ -69,122 +54,35 @@ namespace gps {
             isLoaded(false), terrainType(type) {}
     };
 
-    // ===========================
-    // TILE MANAGER (REFACTORIZAT)
-    // ===========================
     class TileManager {
     public:
         TileManager(float tileSize = 257.0f, glm::vec3 model_size= glm::vec3(27.0f), int height=-60);
 
-        // ===========================
-        // INITIALIZATION
-        // ===========================
-
-        /**
-         * @brief Initializeaza TileManager cu model de teren SI scena
-         * @param terrainModel Modelul 3D folosit pentru tile-uri
-         * @param scene Pointer la scena (pentru a crea SceneObject-uri)
-         *
-         * NOTA: scene NU mai e optional - TileManager are nevoie de el.
-         * terrainModel este folosit ca fallback cand un TileType nu are model dedicat.
-         */
         void Initialize(Model3D* terrainModel, Scene* scene);
-
-        /**
-         * @brief Inregistreaza modelul folosit pentru un anumit TileType
-         * (apelat dupa Initialize, o data per tip)
-         */
         void RegisterTileModel(TileType type, Model3D* model);
-
-        /**
-         * @brief Change a tile's TileType at runtime; swaps the SceneObject's
-         * model to the one registered for the new type and refreshes bounds.
-         */
         void SetTileType(int gridX, int gridZ, TileType newType);
-
-        /**
-         * @brief Stamps a guaranteed small island at the given grid cell:
-         * the center becomes Land, the 6 hex neighbours become Shallows.
-         * Used to ensure player bases always sit on dry ground.
-         */
         void StampIslandAt(int gridX, int gridZ);
 
-        /**
-         * @brief Atribuie procedural TileType la fiecare tile (doar cele cu type==Sea)
-         * seed=0 -> non-deterministic (seeded via std::random_device).
-         */
         void AssignProceduralTypes(unsigned seed = 0u);
-
-        /**
-         * @brief Add a decorative half-scale tile ring around the playable area
-         * so the outline reads as a rectangular border. Border tiles are marked
-         * isBorder=true and are not playable (no placement, units bounce off).
-         */
         void GenerateBorderRing();
 
-        // ===========================
-        // TILE CREATION / LOADING
-        // ===========================
-
-        /**
-         * @brief Creeaza un tile la coordonatele grid specificate
-         * NU il incarca in scena - doar il inregistreaza intern
-         */
         Tile* CreateTile(int gridX, int gridZ, const std::string& terrainType = "default");
-
-        /**
-         * @brief Incarca un tile in scena (creeaza SceneObject)
-         * @return true daca tile-ul a fost incarcat cu succes
-         *
-         * Creeaza un SceneObject real prin Scene::CreateObject()
-         * cu model, transform si bounding sphere setate corect.
-         */
         bool LoadTile(int gridX, int gridZ);
-
-        /**
-         * @brief Descarca un tile din scena (sterge SceneObject-ul)
-         * @return true daca tile-ul a fost descarcat cu succes
-         */
         bool UnloadTile(int gridX, int gridZ);
 
-        // ===========================
-        // BATCH OPERATIONS
-        // ===========================
 
-        /**
-         * @brief Incarca tile-urile intr-o raza specificata
-         */
         void LoadTilesInRadius(const glm::vec3& centerPos, float radius);
-
-        /**
-         * @brief Descarca tile-urile in afara razei
-         */
         void UnloadTilesOutsideRadius(const glm::vec3& centerPos, float radius);
 
-        /**
-         * @brief Genereaza un grid de tile-uri (doar creare, fara load)
-         */
         void GenerateGrid(int minX, int maxX, int minZ, int maxZ,
             const std::string& terrainType = "default");
 
-        /**
-         * @brief Genereaza SI incarca un grid complet
-         * Shortcut pentru GenerateGrid() + LoadAll()
-         */
         void GenerateAndLoadGrid(int minX, int maxX, int minZ, int maxZ,
             const std::string& terrainType = "default");
-
-        // ===========================
-        // QUERIES
-        // ===========================
 
         Tile* GetTile(int gridX, int gridZ);
         bool HasTile(int gridX, int gridZ) const;
 
-        /**
-         * @brief Obtine SceneObject-ul asociat unui tile
-         * @return Pointer la SceneObject sau nullptr
-         */
         SceneObject* GetTileSceneObject(int gridX, int gridZ);
 
         // Conversii coordonate
@@ -208,35 +106,19 @@ namespace gps {
         int GetLoadedCount() const;
         int GetTotalCount() const { return static_cast<int>(m_tiles.size()); }
 
-        // Grid bounds (returns the world-space AABB of all loaded tiles, including border)
         bool GetGridBounds(glm::vec3& outMin, glm::vec3& outMax) const;
-
-        // Tight AABB of just the playable (non-border) tiles. Use this for unit
-        // movement and placement clamping so units stop before the border ring.
         bool GetPlayableBounds(glm::vec3& outMin, glm::vec3& outMax) const;
-
-        // Grid range getters
         void GetGridRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const;
         // Same as GetGridRange but excludes the decorative border ring.
         void GetPlayableRange(int& outMinX, int& outMaxX, int& outMinZ, int& outMaxZ) const;
 
-        // ===========================
-        // CLEANUP
-        // ===========================
 
-        /**
-         * @brief Sterge toate tile-urile (si SceneObject-urile din scena)
-         */
         void Clear();
 
         /**
          * @brief Descarca toate tile-urile fara a le sterge
          */
         void UnloadAll();
-
-        // ===========================
-        // DEBUG
-        // ===========================
         void PrintDebugInfo() const;
 
     private:
@@ -274,6 +156,6 @@ namespace gps {
         void ComputeLocalBoundingSphere(Model3D* model, glm::vec3& outCenter, float& outRadius);
     };
 
-} // namespace gps
+}
 
-#endif // TILE_MANAGER_HPP
+#endif

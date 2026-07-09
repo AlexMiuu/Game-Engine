@@ -52,4 +52,4 @@ namespace gps {
         return distSq < (sumRadii * sumRadii);
     }
 
-} // namespace gps
+}

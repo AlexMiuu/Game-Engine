@@ -1,7 +1,3 @@
-//
-// SceneObject.cpp
-// Implementarea clasei SceneObject
-//
 #include "SceneObject.hpp"
 #include "Component.hpp"
 #include "Model3D.hpp"
@@ -25,7 +21,7 @@ namespace gps {
     }
 
     SceneObject::~SceneObject() {
-        // Cleanup components (std::unique_ptr se ocup� automat)
+        // Cleanup components
         for (auto& component : m_components) {
             if (component) {
                 component->OnDestroy();
@@ -42,22 +38,19 @@ namespace gps {
                 component->Update(deltaTime);
             }
         }
-
-        // Update world bounds (�n caz c� transform-ul s-a schimbat)
         UpdateWorldBounds();
     }
 
     void SceneObject::UpdateWorldBounds() {
-        // Transform� centrul local �n world space
+        // Transforma centrul local in world space
         const glm::mat4& modelMatrix = m_transform.GetModelMatrix();
         glm::vec4 worldCenterVec4 = modelMatrix * glm::vec4(m_localCenter, 1.0f);
         m_worldCenter = glm::vec3(worldCenterVec4);
 
-        // Calculeaz� scale factor (pentru radius)
         // Folosim scale-ul maxim din cele 3 axe
         glm::vec3 scaleVec = m_transform.GetScale();
         float maxScale = std::max(scaleVec.x, std::max(scaleVec.y, scaleVec.z));
         m_worldRadius = m_localRadius * maxScale;
     }
 
-} // namespace gps
+}

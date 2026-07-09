@@ -34,8 +34,6 @@ namespace gps {
 		bool ret = tinyobj::LoadObj(&attrib, &shapes, &materials, &err, fileName.c_str(), basePath.c_str(), GL_TRUE);
 
 		if (!err.empty()) {
-
-			// `err` may contain warning message.
 			std::cerr << err << std::endl;
 		}
 

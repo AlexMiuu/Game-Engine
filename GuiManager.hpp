@@ -25,7 +25,7 @@
 #include <vector>
 #include <glm/glm.hpp>
 
-#include "SelfTest.hpp"   // TestReport (afisat in panoul de depanare)
+#include "SelfTest.hpp"
 
 namespace gps {
 
@@ -229,6 +229,6 @@ namespace gps {
         std::vector<FloatingNumber> m_floatingNumbers;
     };
 
-} // namespace gps
+} 
 
-#endif // GUI_MANAGER_HPP
+#endif

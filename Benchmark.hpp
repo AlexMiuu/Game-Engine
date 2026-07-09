@@ -1,8 +1,5 @@
-//
-// Benchmark.hpp
-// Harness de masurare a performantei pentru capitolul 6 (Testare si validare).
-//
-// Genereaza incarcarea descrisa in tabelele 6.2 si 6.3: spawneaza un numar
+
+// spawneaza un numar
 // crescator de nave in miscare continua, lasa aplicatia sa se stabilizeze
 // (warmup), apoi mediaza rata de cadre, timpul pe cadru si consumul de memorie.
 // Rezultatele sunt afisate in panoul de depanare si scrise intr-un fisier CSV
@@ -158,6 +155,6 @@ namespace gps {
         float    m_reissueTimer = 0.0f;
     };
 
-} // namespace gps
+} 
 
-#endif // BENCHMARK_HPP
+#endif 

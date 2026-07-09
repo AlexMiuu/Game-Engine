@@ -31,7 +31,7 @@ namespace gps {
         float& outDistance
     );
 
-    // 3) Ray-triangle intersection (Möller–Trumbore)
+    // 3) Ray-triangle intersection (Mï¿½llerï¿½Trumbore)
     bool RayIntersectsTriangle(
         const Ray& ray,
         const glm::vec3& v0,
@@ -49,5 +49,5 @@ namespace gps {
         glm::vec3& outPoint
     );
 
-} // end namespace gps
+}
 #endif

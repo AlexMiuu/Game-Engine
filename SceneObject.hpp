@@ -1,7 +1,3 @@
-//
-// SceneObject.hpp
-// Reprezint� un obiect �n scen� cu componente ?i transform
-//
 #ifndef SCENEOBJECT_HPP
 #define SCENEOBJECT_HPP
 
@@ -11,7 +7,6 @@
 #include <glm/glm.hpp>
 #include "Transform.hpp"
 
-// Forward declarations
 namespace gps {
     class Component;
     class Model3D;
@@ -19,9 +14,6 @@ namespace gps {
 
 namespace gps {
 
-    /**
-     * @brief Structur� pentru datele de mi?care ale unui obiect
-     */
     struct MovementData {
         bool isMoving = false;
         glm::vec3 moveStartPos = glm::vec3(0.0f);
@@ -52,7 +44,7 @@ namespace gps {
         bool isCombatUnit = false;
         bool isAlive = true;
         bool isMovable = true;
-        // Per-unit base fire rate (seconds between shots). Lower = faster (e.g. 0.05 = CIWS-like 20 rps).
+        // Per-unit base fire rate (seconds between shots). Lower = faster
         float baseAttackCooldown = 1.0f;
         // Runtime combat state (managed by CombatSystem)
         float attackCooldown = 0.0f;
@@ -83,21 +75,16 @@ namespace gps {
         int   ownerID  = -1;
         int   targetID = -1;
         float damage   = 0.0f;
-        float splashRadius = 0.0f; // 0 = single-target
-        glm::vec3 tint = glm::vec3(1.0f); // multiplied into fragment color; white = no tint
+        float splashRadius = 0.0f; // 0 = single target
+        glm::vec3 tint = glm::vec3(1.0f); // multiplied into fragment color, white = no tint
     };
 
-    // Patrol behavior: bounce between two world-space points until cancelled.
-    // The unit's MovementData is what actually animates the motion each leg;
-    // PatrolData just remembers the endpoints so the arrival hook can re-arm.
     struct PatrolData {
         bool      isPatrolling       = false;
         glm::vec3 pointA             = glm::vec3(0.0f);
         glm::vec3 pointB             = glm::vec3(0.0f);
-        // Per-unit offset from the group centroid at activation time. Locked
-        // here so formations keep their shape even if collisions nudge units.
         glm::vec3 offsetFromCentroid = glm::vec3(0.0f);
-        bool      headingToB         = true; // direction of the current leg
+        bool headingToB= true; 
     };
 
     struct OrbitData {
@@ -108,22 +95,10 @@ namespace gps {
         float orbitAngle = 0.0f;
         float orbitHeight = 20.0f;
 
-        // Carrier-side tracking: aircraftCarrier remembers its currently-deployed
-        // plane and (when destroyed) a glfwGetTime() timestamp at which to spawn
-        // a replacement. respawnAfter == 0 -> no pending respawn.
         int   childAircraftID = -1;
         double respawnAfter   = 0.0;
     };
-    /**
-     * @brief SceneObject - container pentru un obiect �n scen�
-     *
-     * Con?ine:
-     * - Transform (pozi?ie, rota?ie, scale)
-     * - Model 3D pentru rendering
-     * - Componente (logic�, comportament)
-     * - Bounding sphere (pentru culling, collision)
-     * - Date de mi?care
-     */
+
     class SceneObject {
     public:
         SceneObject(int id, const std::string& name = "SceneObject");
@@ -181,19 +156,12 @@ namespace gps {
         }
         void SetTag(const std::string& tag) { m_tag = tag; }
 
-        // Update world bounds based on current transform
         void UpdateWorldBounds();
 
-        // Movement data (public pentru acces u?or)
         MovementData movement;
-
-        // Unit stats (public for easy access, like MovementData)
         UnitStats unitStats;
-
         ProjectileData projectileData;
-
         OrbitData orbitData;
-
         PatrolData patrolData;
 
     private:
@@ -203,19 +171,19 @@ namespace gps {
         bool m_active;
 
         Transform m_transform;
-        Model3D* m_model; // Pointer c�tre model (nu de?inem ownership-ul)
+        Model3D* m_model;
 
         // Componente
         std::vector<std::unique_ptr<Component>> m_components;
 
         // Bounding sphere
-        glm::vec3 m_localCenter;  // �n local space
+        glm::vec3 m_localCenter;
         float m_localRadius;
-        glm::vec3 m_worldCenter;  // �n world space
+        glm::vec3 m_worldCenter;
         float m_worldRadius;
-        float m_collisionRadius;  // 0.0f = not collidable
+        float m_collisionRadius;  
     };
 
-} // namespace gps
+}
 
-#endif // SCENEOBJECT_HPP
+#endif

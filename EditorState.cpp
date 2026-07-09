@@ -30,4 +30,4 @@ namespace gps {
         m_dragObjectID = -1;
     }
 
-} // namespace gps
+}

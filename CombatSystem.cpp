@@ -73,7 +73,7 @@ namespace gps {
             (origin->unitStats.attackMode == AttackMode::ProjectileSplash)
             ? origin->unitStats.splashRadius : 0.0f;
 
-        // CIWS rounds render red; carrier aircraft fire a bright yellow
+        // CIWS rounds render red, carrier aircraft fire a bright yellow
         // air-to-ground tracer so the strike reads clearly from above.
         if (origin->GetTag() == "turret")
             cannonBall->projectileData.tint = glm::vec3(1.0f, 0.15f, 0.15f);
@@ -221,4 +221,4 @@ namespace gps {
             SpawnCannonBall(shot.origin, shot.target, shot.travelTime);
     }
 
-} // namespace gps
+}

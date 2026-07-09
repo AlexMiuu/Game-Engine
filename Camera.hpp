@@ -42,4 +42,4 @@ namespace gps {
     };    
 }
 
-#endif /* Camera_hpp */
+#endif

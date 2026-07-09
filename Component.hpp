@@ -1,6 +1,6 @@
 //
 // Component.hpp
-// Clasa de bazã pentru sistemul de componente
+// Clasa de bazï¿½ pentru sistemul de componente
 //
 
 #ifndef COMPONENT_HPP
@@ -10,26 +10,14 @@ namespace gps {
     // Forward declaration pentru a evita circular dependency
     class SceneObject;
 
-    /**
-     * @brief Clasa de bazã abstractã pentru toate componentele
-     *
-     * Componentele sunt comportamente ata?ate la SceneObject-uri
-     * ?i sunt updatate automat de sistemul de scene.
-     */
+    //Base abstract class for all components. Each component will implement its own Update() and OnDestroy() methods.
+
     class Component {
     public:
         Component() : m_owner(nullptr), m_active(true) {}
         virtual ~Component() = default;
 
-        /**
-         * @brief Update-ul componentei (apelat în fiecare frame)
-         * @param deltaTime Timpul scurs de la ultimul frame
-         */
         virtual void Update(float deltaTime);
-
-        /**
-         * @brief Cleanup înainte de distrugere
-         */
         virtual void OnDestroy();
 
         // Getters/Setters
@@ -41,15 +29,15 @@ namespace gps {
 
     protected:
         SceneObject* m_owner;  ///< Owner-ul componentei
-        bool m_active;         ///< Dacã este activã
+        bool m_active;         // if component is active and should be updated
 
-        // Helper pentru a ob?ine owner-ul într-un mod type-safe
+        //utility for fetching the owner as a type
         template<typename T>
         T* GetOwnerAs() const {
             return static_cast<T*>(m_owner);
         }
     };
 
-} // namespace gps
+}
 
-#endif // COMPONENT_HPP
+#endif
